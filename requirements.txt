@@ -1,0 +1,16 @@
+# LandscapeCutter 依赖包
+
+# UI框架
+PySide6>=6.4.0
+
+# 屏幕捕获
+mss>=7.0.0
+
+# 图像处理
+opencv-python>=4.5.0
+
+# 窗口管理
+pywin32>=303.0.0
+
+# 可选：C++绑定（用于高性能后端）
+# pybind11>=2.10.0
