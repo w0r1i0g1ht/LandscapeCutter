@@ -82,9 +82,7 @@ class MainWindow(QMainWindow):
     def select_region(self):
         """选择区域"""
         try:
-            # 传递目标窗口句柄给区域选择器
-            target_window_hwnd = self.target_window['hwnd'] if self.target_window else None
-            region_selector = RegionSelector(target_window=target_window_hwnd)
+            region_selector = RegionSelector()
             self.selected_region = region_selector.select_region()
             if self.selected_region:
                 self.status_label.setText(f"已选择区域: {self.selected_region['width']}x{self.selected_region['height']}")

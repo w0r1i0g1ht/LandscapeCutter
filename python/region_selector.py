@@ -8,50 +8,31 @@ LandscapeCutter 区域选择器模块
 from PySide6.QtWidgets import QDialog
 from PySide6.QtCore import Qt, QPoint, QRect
 from PySide6.QtGui import QPainter, QPen, QColor, QBrush
-import win32gui
 
 class RegionSelector(QDialog):
-    def __init__(self, parent=None, target_window=None):
+    def __init__(self, parent=None):
         """初始化区域选择器
         
         Args:
             parent: 父窗口
-            target_window: 目标窗口句柄
         """
         super().__init__(parent)
-        
-        # 初始化参数
-        self.target_window = target_window
         
         # 设置窗口属性
         self.setWindowTitle("选择区域")
         self.setWindowFlags(Qt.Window | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)
         self.setAttribute(Qt.WA_TranslucentBackground)
         
-        # 获取屏幕大小或目标窗口大小
+        # 获取屏幕大小
         from PySide6.QtWidgets import QApplication
         app = QApplication.instance()
         if not app:
             app = QApplication([])
+        screen = app.primaryScreen()
+        size = screen.size()
         
-        if self.target_window:
-            # 获取目标窗口的位置和大小
-            window_rect = win32gui.GetWindowRect(self.target_window)
-            self.window_x, self.window_y, self.window_right, self.window_bottom = window_rect
-            self.window_width = self.window_right - self.window_x
-            self.window_height = self.window_bottom - self.window_y
-            
-            # 设置窗口大小为目标窗口大小
-            self.setGeometry(self.window_x, self.window_y, self.window_width, self.window_height)
-        else:
-            # 获取屏幕大小
-            screen = app.primaryScreen()
-            size = screen.size()
-            
-            # 设置窗口大小为整个屏幕
-            self.setGeometry(0, 0, size.width(), size.height())
-            self.window_x = 0
-            self.window_y = 0
+        # 设置窗口大小为整个屏幕
+        self.setGeometry(0, 0, size.width(), size.height())
         
         # 选择区域相关
         self.start_point = QPoint()
@@ -112,39 +93,17 @@ class RegionSelector(QDialog):
             
             # 确保选择区域有效
             if rect.width() > 10 and rect.height() > 10:
-                # 返回相对于目标窗口的坐标
                 self.selected_region = {
                     "x": rect.x(),
                     "y": rect.y(),
                     "width": rect.width(),
                     "height": rect.height()
                 }
-                print(f"选择的区域: {self.selected_region}")
                 self.accept()
             else:
                 # 选择区域太小，取消选择
                 self.selected_region = None
                 self.reject()
-    
-    def get_selection_rect(self):
-        """获取选择区域的矩形
-        
-        Returns:
-            QRect: 选择区域的矩形
-        """
-        x1 = min(self.start_point.x(), self.end_point.x())
-        y1 = min(self.start_point.y(), self.end_point.y())
-        x2 = max(self.start_point.x(), self.end_point.x())
-        y2 = max(self.start_point.y(), self.end_point.y())
-        
-        # 限制在窗口边界内
-        if self.target_window:
-            x1 = max(0, x1)
-            y1 = max(0, y1)
-            x2 = min(self.window_width, x2)
-            y2 = min(self.window_height, y2)
-        
-        return QRect(x1, y1, x2 - x1, y2 - y1)
     
     def keyPressEvent(self, event):
         """键盘事件"""

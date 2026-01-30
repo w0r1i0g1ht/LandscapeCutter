@@ -1,15 +1,15 @@
 {
   "target_window": {
-    "hwnd": 42668042,
-    "process_id": 48616,
-    "process_name": "QQ.exe",
-    "title": "QQ"
+    "hwnd": 69120,
+    "process_id": 9432,
+    "process_name": "Weixin.exe",
+    "title": "微信"
   },
   "selected_region": {
-    "x": 234,
-    "y": 33,
-    "width": 345,
-    "height": 413
+    "x": 814,
+    "y": 226,
+    "width": 232,
+    "height": 398
   },
   "capture": {
     "method": "mss"
