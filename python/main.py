@@ -6,6 +6,9 @@ LandscapeCutter 程序入口
 """
 
 import sys
+import win32gui
+import win32api
+import win32con
 from PySide6.QtWidgets import QApplication, QMainWindow, QPushButton, QVBoxLayout, QWidget, QLabel
 from PySide6.QtCore import Qt
 
@@ -50,6 +53,16 @@ class MainWindow(QMainWindow):
         self.create_float_btn.clicked.connect(self.create_floating_window)
         layout.addWidget(self.create_float_btn)
         
+        # 固定并后台运行按钮
+        self.pin_background_btn = QPushButton("固定并后台运行")
+        self.pin_background_btn.clicked.connect(self.pin_window_background)
+        layout.addWidget(self.pin_background_btn)
+        
+        # 恢复窗口按钮
+        self.restore_window_btn = QPushButton("恢复窗口")
+        self.restore_window_btn.clicked.connect(self.restore_window)
+        layout.addWidget(self.restore_window_btn)
+        
         # 状态标签
         self.status_label = QLabel("就绪")
         self.status_label.setAlignment(Qt.AlignCenter)
@@ -61,6 +74,10 @@ class MainWindow(QMainWindow):
         self.floating_window = None
         self.target_window = None
         self.selected_region = None
+        
+        # 窗口状态管理
+        self.window_state = "NORMAL"  # NORMAL 或 PSEUDO_MINIMIZED
+        self.original_window_pos = None  # 原始窗口位置
         
         # 加载配置
         self.load_config()
@@ -82,7 +99,7 @@ class MainWindow(QMainWindow):
     def select_region(self):
         """选择区域"""
         try:
-            region_selector = RegionSelector()
+            region_selector = RegionSelector(target_window=self.target_window)
             self.selected_region = region_selector.select_region()
             if self.selected_region:
                 self.status_label.setText(f"已选择区域: {self.selected_region['width']}x{self.selected_region['height']}")
@@ -126,6 +143,74 @@ class MainWindow(QMainWindow):
             }
         }
         self.config_mgr.save(config)
+    
+    def pin_window_background(self):
+        """固定窗口到后台运行（伪最小化）"""
+        try:
+            if not self.target_window:
+                self.status_label.setText("请先选择目标窗口")
+                return
+            
+            # 保存原始窗口位置
+            hwnd = self.target_window['hwnd']
+            rect = win32gui.GetWindowRect(hwnd)
+            self.original_window_pos = {
+                "left": rect[0],
+                "top": rect[1],
+                "right": rect[2],
+                "bottom": rect[3]
+            }
+            
+            # 将窗口移动到屏幕外
+            screen_width = win32api.GetSystemMetrics(0)
+            screen_height = win32api.GetSystemMetrics(1)
+            
+            # 移动到屏幕右下方外
+            offscreen_x = screen_width + 1000
+            offscreen_y = screen_height + 1000
+            
+            window_width = rect[2] - rect[0]
+            window_height = rect[3] - rect[1]
+            
+            win32gui.SetWindowPos(
+                hwnd,
+                None,
+                offscreen_x,
+                offscreen_y,
+                window_width,
+                window_height,
+                win32con.SWP_NOZORDER | win32con.SWP_NOACTIVATE
+            )
+            
+            self.window_state = "PSEUDO_MINIMIZED"
+            self.status_label.setText(f"窗口已固定到后台运行: {self.target_window['title']}")
+        except Exception as e:
+            self.status_label.setText(f"错误: {str(e)}")
+    
+    def restore_window(self):
+        """恢复窗口显示"""
+        try:
+            if not self.target_window or not self.original_window_pos:
+                self.status_label.setText("没有可恢复的窗口")
+                return
+            
+            hwnd = self.target_window['hwnd']
+            
+            # 恢复窗口到原始位置
+            win32gui.SetWindowPos(
+                hwnd,
+                None,
+                self.original_window_pos["left"],
+                self.original_window_pos["top"],
+                self.original_window_pos["right"] - self.original_window_pos["left"],
+                self.original_window_pos["bottom"] - self.original_window_pos["top"],
+                win32con.SWP_NOZORDER
+            )
+            
+            self.window_state = "NORMAL"
+            self.status_label.setText(f"窗口已恢复: {self.target_window['title']}")
+        except Exception as e:
+            self.status_label.setText(f"错误: {str(e)}")
     
     def load_config(self):
         """加载配置"""

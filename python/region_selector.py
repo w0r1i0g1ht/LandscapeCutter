@@ -10,13 +10,17 @@ from PySide6.QtCore import Qt, QPoint, QRect
 from PySide6.QtGui import QPainter, QPen, QColor, QBrush
 
 class RegionSelector(QDialog):
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, target_window=None):
         """初始化区域选择器
         
         Args:
             parent: 父窗口
+            target_window: 目标窗口句柄
         """
         super().__init__(parent)
+        
+        # 初始化参数
+        self.target_window = target_window
         
         # 设置窗口属性
         self.setWindowTitle("选择区域")
@@ -93,12 +97,28 @@ class RegionSelector(QDialog):
             
             # 确保选择区域有效
             if rect.width() > 10 and rect.height() > 10:
+                # 初始化区域信息
                 self.selected_region = {
                     "x": rect.x(),
                     "y": rect.y(),
                     "width": rect.width(),
                     "height": rect.height()
                 }
+                
+                # 如果设置了目标窗口，计算相对于窗口的坐标
+                if self.target_window:
+                    try:
+                        import win32gui
+                        # 获取窗口句柄
+                        hwnd = self.target_window.get('hwnd')
+                        if hwnd:
+                            window_rect = win32gui.GetWindowRect(hwnd)
+                            if window_rect:
+                                self.selected_region["relative_x"] = rect.x() - window_rect[0]
+                                self.selected_region["relative_y"] = rect.y() - window_rect[1]
+                    except Exception as e:
+                        print(f"计算相对坐标错误: {str(e)}")
+                
                 self.accept()
             else:
                 # 选择区域太小，取消选择

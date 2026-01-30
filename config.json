@@ -1,15 +1,17 @@
 {
   "target_window": {
-    "hwnd": 69120,
-    "process_id": 9432,
-    "process_name": "Weixin.exe",
-    "title": "微信"
+    "hwnd": 23989898,
+    "process_id": 30596,
+    "process_name": "firefox.exe",
+    "title": "时间_百度搜索 — Mozilla Firefox"
   },
   "selected_region": {
-    "x": 814,
-    "y": 226,
-    "width": 232,
-    "height": 398
+    "x": 141,
+    "y": 286,
+    "width": 599,
+    "height": 304,
+    "relative_x": 150,
+    "relative_y": 295
   },
   "capture": {
     "method": "mss"
