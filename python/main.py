@@ -2,232 +2,197 @@
 # -*- coding: utf-8 -*-
 
 """
-LandscapeCutter 程序入口
+LandscapeCutter 主程序
+实现Alt+X快捷键截图和悬浮窗实时显示功能
 """
 
 import sys
-import win32gui
-import win32api
-import win32con
-from PySide6.QtWidgets import QApplication, QMainWindow, QPushButton, QVBoxLayout, QWidget, QLabel
-from PySide6.QtCore import Qt
+import os
+import ctypes
+from ctypes import wintypes
+from PySide6.QtWidgets import QApplication, QWidget, QSystemTrayIcon, QMenu
+from PySide6.QtCore import Qt, QTimer, Signal, QObject
+from PySide6.QtGui import QAction, QIcon
 
+from screen_selector import ScreenSelector
 from floating_window import FloatingWindow
 from capture_mss import Capture
-from window_picker import WindowPicker
-from region_selector import RegionSelector
-from config_manager import ConfigMgr
 
-class MainWindow(QMainWindow):
+# Windows API常量
+WM_HOTKEY = 0x0312
+MOD_ALT = 0x0001
+MOD_CONTROL = 0x0002
+MOD_SHIFT = 0x0004
+MOD_WIN = 0x0008
+VK_X = 0x58  # X键的虚拟键码
+
+class HotkeyWindow(QWidget):
+    """专门用于接收热键消息的窗口"""
+    hotkey_pressed = Signal()
+    
     def __init__(self):
-        """初始化主窗口"""
         super().__init__()
-        self.setWindowTitle("LandscapeCutter")
-        self.setGeometry(100, 100, 400, 300)
+        self.setWindowTitle("LandscapeCutter Hotkey")
+        self.setGeometry(0, 0, 1, 1)
+        self.setWindowFlags(Qt.Tool | Qt.FramelessWindowHint)
+        self.hide()
         
-        # 初始化组件
-        central_widget = QWidget()
-        self.setCentralWidget(central_widget)
+        # 热键ID
+        self.hotkey_id = 1
         
-        layout = QVBoxLayout()
-        central_widget.setLayout(layout)
+        # 注册热键
+        self.register_hotkey()
         
-        # 标题
-        title_label = QLabel("LandscapeCutter")
-        title_label.setAlignment(Qt.AlignCenter)
-        title_label.setStyleSheet("font-size: 18px; font-weight: bold;")
-        layout.addWidget(title_label)
+        # 启动定时器检查热键消息
+        self.timer = QTimer(self)
+        self.timer.timeout.connect(self.check_hotkey)
+        self.timer.start(50)  # 每50ms检查一次
+    
+    def register_hotkey(self):
+        """注册全局热键 Alt+X"""
+        try:
+            hwnd = int(self.winId())
+            # 注册 Alt+X 热键
+            if not ctypes.windll.user32.RegisterHotKey(hwnd, self.hotkey_id, MOD_ALT, VK_X):
+                error_code = ctypes.windll.kernel32.GetLastError()
+                print(f"注册全局热键失败，错误码: {error_code}")
+                if error_code == 1409:
+                    print("热键已被其他程序占用")
+            else:
+                print("全局 Alt+X 热键注册成功")
+        except Exception as e:
+            print(f"注册热键错误: {str(e)}")
+    
+    def check_hotkey(self):
+        """检查热键消息"""
+        try:
+            hwnd = int(self.winId())
+            msg = wintypes.MSG()
+            
+            # 检查是否有热键消息 (PM_REMOVE = 0x0001)
+            while ctypes.windll.user32.PeekMessageW(ctypes.byref(msg), hwnd, WM_HOTKEY, WM_HOTKEY, 0x0001):
+                if msg.message == WM_HOTKEY and msg.wParam == self.hotkey_id:
+                    self.hotkey_pressed.emit()
+        except Exception as e:
+            pass
+    
+    def unregister_hotkey(self):
+        """注销热键"""
+        try:
+            hwnd = int(self.winId())
+            ctypes.windll.user32.UnregisterHotKey(hwnd, self.hotkey_id)
+            print("全局热键已注销")
+        except:
+            pass
+
+class MainWindow(QApplication):
+    def __init__(self):
+        """初始化主程序"""
+        super().__init__(sys.argv)
         
-        # 选择窗口按钮
-        self.select_window_btn = QPushButton("选择目标窗口")
-        self.select_window_btn.clicked.connect(self.select_target_window)
-        layout.addWidget(self.select_window_btn)
-        
-        # 选择区域按钮
-        self.select_region_btn = QPushButton("选择区域")
-        self.select_region_btn.clicked.connect(self.select_region)
-        layout.addWidget(self.select_region_btn)
-        
-        # 创建悬浮窗按钮
-        self.create_float_btn = QPushButton("创建悬浮窗")
-        self.create_float_btn.clicked.connect(self.create_floating_window)
-        layout.addWidget(self.create_float_btn)
-        
-        # 固定并后台运行按钮
-        self.pin_background_btn = QPushButton("固定并后台运行")
-        self.pin_background_btn.clicked.connect(self.pin_window_background)
-        layout.addWidget(self.pin_background_btn)
-        
-        # 恢复窗口按钮
-        self.restore_window_btn = QPushButton("恢复窗口")
-        self.restore_window_btn.clicked.connect(self.restore_window)
-        layout.addWidget(self.restore_window_btn)
-        
-        # 状态标签
-        self.status_label = QLabel("就绪")
-        self.status_label.setAlignment(Qt.AlignCenter)
-        layout.addWidget(self.status_label)
-        
-        # 初始化组件
-        self.config_mgr = ConfigMgr()
+        # 初始化捕获模块
         self.capture = Capture()
+        
+        # 当前悬浮窗
         self.floating_window = None
-        self.target_window = None
-        self.selected_region = None
         
-        # 窗口状态管理
-        self.window_state = "NORMAL"  # NORMAL 或 PSEUDO_MINIMIZED
-        self.original_window_pos = None  # 原始窗口位置
+        # 创建热键窗口
+        self.hotkey_window = HotkeyWindow()
+        self.hotkey_window.hotkey_pressed.connect(self.start_screenshot)
         
-        # 加载配置
-        self.load_config()
+        # 初始化系统托盘
+        self.setup_tray()
+        
+        # 隐藏主窗口
+        self.setQuitOnLastWindowClosed(False)
     
-    def select_target_window(self):
-        """选择目标窗口"""
-        try:
-            window_picker = WindowPicker()
-            self.target_window = window_picker.pick_window()
-            if self.target_window:
-                self.status_label.setText(f"已选择窗口: {self.target_window['title']}")
-                self.capture.set_target_window(self.target_window['hwnd'])
-                self.save_config()
-            else:
-                self.status_label.setText("未选择窗口")
-        except Exception as e:
-            self.status_label.setText(f"错误: {str(e)}")
+    def setup_tray(self):
+        """设置系统托盘"""
+        # 获取ico文件路径
+        icon_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "assets", "LandscapeCutter.ico")
+        
+        # 创建托盘图标
+        self.tray_icon = QSystemTrayIcon(self)
+        
+        # 设置托盘图标
+        if os.path.exists(icon_path):
+            self.tray_icon.setIcon(QIcon(icon_path))
+        else:
+            self.tray_icon.setIcon(QIcon())
+        
+        # 创建托盘菜单
+        tray_menu = QMenu()
+        
+        # 添加截图动作
+        screenshot_action = QAction("截图 (Alt+X)", self)
+        screenshot_action.triggered.connect(self.start_screenshot)
+        tray_menu.addAction(screenshot_action)
+        
+        tray_menu.addSeparator()
+        
+        # 添加退出动作
+        exit_action = QAction("退出", self)
+        exit_action.triggered.connect(self.quit_app)
+        tray_menu.addAction(exit_action)
+        
+        # 设置托盘菜单
+        self.tray_icon.setContextMenu(tray_menu)
+        
+        # 连接托盘图标点击事件
+        self.tray_icon.activated.connect(self.on_tray_activated)
+        
+        # 显示托盘图标
+        self.tray_icon.show()
+        
+        # 显示提示信息
+        self.tray_icon.showMessage(
+            "LandscapeCutter",
+            "按 Alt+X 开始截图\n双击悬浮窗可关闭\n点击托盘图标也可截图",
+            QSystemTrayIcon.Information,
+            3000
+        )
     
-    def select_region(self):
-        """选择区域"""
-        try:
-            region_selector = RegionSelector(target_window=self.target_window)
-            self.selected_region = region_selector.select_region()
-            if self.selected_region:
-                self.status_label.setText(f"已选择区域: {self.selected_region['width']}x{self.selected_region['height']}")
-                self.save_config()
-            else:
-                self.status_label.setText("未选择区域")
-        except Exception as e:
-            self.status_label.setText(f"错误: {str(e)}")
+    def on_tray_activated(self, reason):
+        """托盘图标激活事件"""
+        if reason in (QSystemTrayIcon.Trigger, QSystemTrayIcon.DoubleClick):
+            self.start_screenshot()
     
-    def create_floating_window(self):
-        """创建悬浮窗"""
+    def start_screenshot(self):
+        """开始截图"""
         try:
+            # 如果已有悬浮窗，先关闭
             if self.floating_window:
                 self.floating_window.close()
+                self.floating_window = None
             
-            # 使用选择的区域或默认区域
-            if self.selected_region:
-                region = self.selected_region
-            else:
-                # 默认区域：屏幕中心 200x200
-                region = {
-                    "x": 960 - 100,  # 假设屏幕宽度1920
-                    "y": 540 - 100,  # 假设屏幕高度1080
-                    "width": 200,
-                    "height": 200
-                }
+            # 创建屏幕选择器
+            selector = ScreenSelector()
             
-            self.floating_window = FloatingWindow(self.capture, region)
-            self.floating_window.show()
-            self.status_label.setText("悬浮窗已创建")
+            # 显示选择器并获取选择的区域
+            region, logical_rect = selector.select_region()
+            
+            if region and logical_rect:
+                print(f"选择的区域（物理像素）: {region}")
+                print(f"选择的区域（逻辑像素）: {logical_rect}")
+                # 创建悬浮窗，传入逻辑矩形以确保窗口大小和位置与选择区域一致
+                self.floating_window = FloatingWindow(self.capture, region, logical_rect)
+                self.floating_window.show()
         except Exception as e:
-            self.status_label.setText(f"错误: {str(e)}")
+            print(f"截图错误: {str(e)}")
+            import traceback
+            traceback.print_exc()
     
-    def save_config(self):
-        """保存配置"""
-        config = {
-            "target_window": self.target_window,
-            "selected_region": self.selected_region,
-            "capture": {
-                "method": "mss"
-            }
-        }
-        self.config_mgr.save(config)
-    
-    def pin_window_background(self):
-        """固定窗口到后台运行（伪最小化）"""
-        try:
-            if not self.target_window:
-                self.status_label.setText("请先选择目标窗口")
-                return
-            
-            # 保存原始窗口位置
-            hwnd = self.target_window['hwnd']
-            rect = win32gui.GetWindowRect(hwnd)
-            self.original_window_pos = {
-                "left": rect[0],
-                "top": rect[1],
-                "right": rect[2],
-                "bottom": rect[3]
-            }
-            
-            # 将窗口移动到屏幕外
-            screen_width = win32api.GetSystemMetrics(0)
-            screen_height = win32api.GetSystemMetrics(1)
-            
-            # 移动到屏幕右下方外
-            offscreen_x = screen_width + 1000
-            offscreen_y = screen_height + 1000
-            
-            window_width = rect[2] - rect[0]
-            window_height = rect[3] - rect[1]
-            
-            win32gui.SetWindowPos(
-                hwnd,
-                None,
-                offscreen_x,
-                offscreen_y,
-                window_width,
-                window_height,
-                win32con.SWP_NOZORDER | win32con.SWP_NOACTIVATE
-            )
-            
-            self.window_state = "PSEUDO_MINIMIZED"
-            self.status_label.setText(f"窗口已固定到后台运行: {self.target_window['title']}")
-        except Exception as e:
-            self.status_label.setText(f"错误: {str(e)}")
-    
-    def restore_window(self):
-        """恢复窗口显示"""
-        try:
-            if not self.target_window or not self.original_window_pos:
-                self.status_label.setText("没有可恢复的窗口")
-                return
-            
-            hwnd = self.target_window['hwnd']
-            
-            # 恢复窗口到原始位置
-            win32gui.SetWindowPos(
-                hwnd,
-                None,
-                self.original_window_pos["left"],
-                self.original_window_pos["top"],
-                self.original_window_pos["right"] - self.original_window_pos["left"],
-                self.original_window_pos["bottom"] - self.original_window_pos["top"],
-                win32con.SWP_NOZORDER
-            )
-            
-            self.window_state = "NORMAL"
-            self.status_label.setText(f"窗口已恢复: {self.target_window['title']}")
-        except Exception as e:
-            self.status_label.setText(f"错误: {str(e)}")
-    
-    def load_config(self):
-        """加载配置"""
-        config = self.config_mgr.load()
-        if config:
-            if "target_window" in config:
-                self.target_window = config["target_window"]
-                if self.target_window:
-                    self.status_label.setText(f"已加载窗口: {self.target_window['title']}")
-                    self.capture.set_target_window(self.target_window['hwnd'])
-            if "selected_region" in config:
-                self.selected_region = config["selected_region"]
-                if self.selected_region:
-                    self.status_label.setText(f"已加载区域: {self.selected_region['width']}x{self.selected_region['height']}")
+    def quit_app(self):
+        """退出程序"""
+        # 注销热键
+        if self.hotkey_window:
+            self.hotkey_window.unregister_hotkey()
+            self.hotkey_window.close()
+        
+        if self.floating_window:
+            self.floating_window.close()
+        self.quit()
 
 if __name__ == "__main__":
-    app = QApplication(sys.argv)
-    window = MainWindow()
-    window.show()
+    app = MainWindow()
     sys.exit(app.exec())
