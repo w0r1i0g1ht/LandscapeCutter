@@ -1,0 +1,21 @@
+{
+  "name": "landscapecutter",
+  "version-string": "0.1.0-dev",
+  "description": "GPU-accelerated Windows snipping, pinning, and live-region monitoring tool",
+  "supports": "windows & x64",
+  "dependencies": [
+    "catch2",
+    {
+      "name": "qtbase",
+      "default-features": false,
+      "features": [
+        "gui",
+        "jpeg",
+        "png",
+        "widgets"
+      ]
+    },
+    "spdlog",
+    "wil"
+  ]
+}
