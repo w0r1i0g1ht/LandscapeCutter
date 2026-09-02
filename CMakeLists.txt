@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.28)
+cmake_minimum_required(VERSION 4.4)
 
 project(LandscapeCutter VERSION 0.1.0 LANGUAGES CXX RC)
 
@@ -36,10 +36,7 @@ set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
 
-find_package(Qt6 6.8 REQUIRED COMPONENTS Core Gui Widgets)
-if(Qt6_VERSION VERSION_GREATER_EQUAL "6.9.0")
-    message(FATAL_ERROR "Milestone 0 is pinned to the Qt 6.8 series.")
-endif()
+find_package(Qt6 6.8.2 EXACT REQUIRED COMPONENTS Core Gui Widgets)
 message(STATUS "Using Qt ${Qt6_VERSION}")
 
 find_package(spdlog CONFIG REQUIRED)

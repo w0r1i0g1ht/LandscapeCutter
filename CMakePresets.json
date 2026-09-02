@@ -1,15 +1,15 @@
 {
   "version": 6,
   "cmakeMinimumRequired": {
-    "major": 3,
-    "minor": 28,
+    "major": 4,
+    "minor": 4,
     "patch": 0
   },
   "configurePresets": [
     {
       "name": "windows-msvc-debug",
       "displayName": "Windows x64 MSVC Debug",
-      "generator": "Visual Studio 17 2022",
+      "generator": "Visual Studio 18 2026",
       "architecture": "x64",
       "binaryDir": "${sourceDir}/out/build/windows-msvc-debug",
       "cacheVariables": {

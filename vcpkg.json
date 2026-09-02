@@ -3,6 +3,7 @@
   "version-string": "0.1.0-dev",
   "description": "GPU-accelerated Windows snipping, pinning, and live-region monitoring tool",
   "supports": "windows & x64",
+  "builtin-baseline": "c76c06644034521fb761a39f8f52d8e87d1103d5",
   "dependencies": [
     "catch2",
     {
@@ -17,5 +18,12 @@
     },
     "spdlog",
     "wil"
+  ],
+  "overrides": [
+    {
+      "name": "qtbase",
+      "version": "6.8.2",
+      "port-version": 2
+    }
   ]
 }
