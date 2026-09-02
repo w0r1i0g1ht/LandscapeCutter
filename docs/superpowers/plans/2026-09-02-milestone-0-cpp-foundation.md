@@ -71,7 +71,7 @@ LandscapeCutter/
 - 输入：包含已批准 C++ 重构设计、工作区干净的当前 Git `HEAD`。
 - 输出：带注释的 `python-prototype-final` 标签和永久恢复说明。
 
-- [ ] **步骤 1：确认原型可以安全打标签**
+- [x] **步骤 1：确认原型可以安全打标签**
 
 运行：
 
@@ -82,7 +82,7 @@ git tag --list python-prototype-final
 
 预期：两条命令均不输出内容。如果工作区存在改动，停止操作并逐一确认所有路径后再继续。如果标签已经存在，运行 `git show --stat python-prototype-final`；只有当它确实指向当前 Python 原型时才允许复用。
 
-- [ ] **步骤 2：创建带注释的恢复标签**
+- [x] **步骤 2：创建带注释的恢复标签**
 
 运行：
 
@@ -92,7 +92,7 @@ git tag -a python-prototype-final -m "Final Python prototype before the C++ rewr
 
 预期：退出码为 0。
 
-- [ ] **步骤 3：验证标签目标和已跟踪的原型文件**
+- [x] **步骤 3：验证标签目标和已跟踪的原型文件**
 
 运行：
 
@@ -103,7 +103,7 @@ git ls-tree -r --name-only python-prototype-final -- python requirements.txt con
 
 预期：标签解析到设计获批时的 `HEAD`；第二条命令列出 Python 源码、依赖文件、配置、已跟踪字节码及旧 `.pyd` 二进制文件。
 
-- [ ] **步骤 4：使用 `apply_patch` 创建迁移记录**
+- [x] **步骤 4：使用 `apply_patch` 创建迁移记录**
 
 使用以下完整内容创建 `legacy/README.md`：
 
@@ -123,7 +123,7 @@ git ls-tree -r --name-only python-prototype-final
 C++ 实现，不维持与 Python 文件布局或 API 的兼容性。
 ````
 
-- [ ] **步骤 5：提交恢复说明**
+- [x] **步骤 5：提交恢复说明**
 
 运行：
 
