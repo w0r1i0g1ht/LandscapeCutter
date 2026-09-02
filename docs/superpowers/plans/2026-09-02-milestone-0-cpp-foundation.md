@@ -1,163 +1,161 @@
-# Milestone 0 C++ Foundation Implementation Plan
+# 里程碑 0：C++ 工程基础实施计划
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **供智能体执行者使用：** 必须使用 `superpowers:subagent-driven-development`（推荐）或 `superpowers:executing-plans` 子技能，逐项实施本计划。所有步骤均使用复选框（`- [ ]`）跟踪进度。
 
-**Goal:** Preserve the final Python prototype in Git, replace the active runtime with a reproducible C++20/Qt 6.8 application shell, and leave the repository building and testing cleanly on Windows x64.
+**目标：** 在 Git 中完整保留最终 Python 原型，将当前运行实现替换为可复现的 C++20/Qt 6.8 应用空壳，并确保仓库能在 Windows x64 环境中干净地完成构建和测试。
 
-**Architecture:** This milestone establishes only the application shell and engineering foundation. A Qt Widgets tray process is built through CMake and a repository-local, tag-pinned vcpkg checkout; feature modules for capture, annotation, and pinning remain outside this plan and will be added in later milestone plans.
+**架构：** 本里程碑只建立应用空壳和工程基础。使用 CMake 与仓库本地、固定标签的 vcpkg 构建 Qt Widgets 托盘进程；捕获、标注和贴图等功能模块不在本计划范围内，将在后续里程碑计划中分别实现。
 
-**Tech Stack:** Visual Studio 2022 MSVC v143, C++20, Windows SDK 10.0.19041+, Qt 6.8.2 dynamic libraries, CMake 3.28+, vcpkg 2025.02.14, WIL, spdlog, Catch2.
+**技术栈：** Visual Studio 2022 MSVC v143、C++20、Windows SDK 10.0.19041+、Qt 6.8.2 动态库、CMake 3.28+、vcpkg 2025.02.14、WIL、spdlog、Catch2。
 
-**Spec:** `docs/superpowers/specs/2026-09-02-cpp-rewrite-design.md`
+**设计文档：** `docs/superpowers/specs/2026-09-02-cpp-rewrite-design.md`
 
-## Global Constraints
+## 全局约束
 
-- Target Windows 10 1903 and later, including Windows 11.
-- Publish and test x64 only in the first release.
-- Use Qt 6.8 series through LGPL-compatible dynamic linking.
-- Use MSVC 2022, the C++20 language standard, and Windows SDK 10.0.19041 or newer.
-- Keep Windows-specific APIs behind focused modules; this milestone contains no capture implementation.
-- Never log screenshots, window content, clipboard content, or annotation text.
-- Preserve the Python prototype through the annotated Git tag `python-prototype-final` before deleting tracked Python artifacts.
-- Keep the product name `LandscapeCutter`; describe Snipaste only as inspiration and do not imply affiliation.
-- Use physical pixels for future capture data, but introduce no coordinate model in this foundation milestone.
+- 目标系统为 Windows 10 1903 及以上版本，包括 Windows 11。
+- 首个版本只发布并测试 x64 架构。
+- 使用符合 LGPL 动态链接要求的 Qt 6.8 系列。
+- 使用 MSVC 2022、C++20 语言标准以及 Windows SDK 10.0.19041 或更高版本。
+- Windows 专用 API 必须封装在职责明确的模块中；本里程碑不实现捕获功能。
+- 日志不得记录截图、窗口内容、剪贴板内容或标注文本。
+- 删除 Git 已跟踪的 Python 产物前，必须通过带注释的 Git 标签 `python-prototype-final` 保存 Python 原型。
+- 保留产品名 `LandscapeCutter`；只将 Snipaste 描述为灵感来源，不得暗示任何关联关系。
+- 后续捕获数据统一使用物理像素，但本工程基础里程碑不引入坐标模型。
 
-## Plan Scope
+## 计划范围
 
-This is the first of seven implementation plans. It implements Milestone 0 only. The following independently testable plans will cover Windows graphics foundations, static snipping, annotation, static pins, live pins, and productization.
+这是七份实施计划中的第一份，只实现里程碑 0。后续可独立测试的计划将依次覆盖 Windows 图形基础、静态截图、标注、静态贴图、实时贴图和产品化。
 
-## Target File Map
+## 目标文件结构
 
 ```text
 LandscapeCutter/
-├─ CMakeLists.txt                         # Root build policy and dependencies
-├─ CMakePresets.json                      # Reproducible Windows x64 presets
-├─ vcpkg.json                             # Manifest dependencies
-├─ .clang-format                          # C++ formatting contract
-├─ .gitignore                             # Build, vcpkg, IDE, and runtime artifacts
+├─ CMakeLists.txt                         # 根构建策略和依赖
+├─ CMakePresets.json                      # 可复现的 Windows x64 预设
+├─ vcpkg.json                             # 清单依赖
+├─ .clang-format                          # C++ 格式化约定
+├─ .gitignore                             # 构建、vcpkg、IDE 和运行产物
 ├─ cmake/
-│  └─ Warnings.cmake                      # Project-only MSVC warning policy
+│  └─ Warnings.cmake                      # 只作用于本项目的 MSVC 警告策略
 ├─ scripts/
-│  └─ bootstrap.ps1                       # Pin and bootstrap vcpkg 2025.02.14
+│  └─ bootstrap.ps1                       # 固定并引导 vcpkg 2025.02.14
 ├─ src/
-│  ├─ CMakeLists.txt                      # Application targets
-│  ├─ main.cpp                            # QApplication entry point
+│  ├─ CMakeLists.txt                      # 应用目标
+│  ├─ main.cpp                            # QApplication 入口
 │  └─ app/
-│     ├─ AppController.hpp                # Tray application ownership boundary
-│     ├─ AppController.cpp                # Tray menu and lifecycle behavior
-│     ├─ AppMetadata.hpp                  # Stable product metadata
-│     ├─ LaunchOptions.hpp                # Launch-mode public contract
-│     └─ LaunchOptions.cpp                # Command-line parsing
+│     ├─ AppController.hpp                # 托盘应用所有权边界
+│     ├─ AppController.cpp                # 托盘菜单和生命周期行为
+│     ├─ AppMetadata.hpp                  # 稳定的产品元数据
+│     ├─ LaunchOptions.hpp                # 启动模式公开约定
+│     └─ LaunchOptions.cpp                # 命令行解析
 ├─ tests/
-│  ├─ CMakeLists.txt                      # Catch2 and process smoke tests
+│  ├─ CMakeLists.txt                      # Catch2 和进程冒烟测试
 │  └─ app/
-│     ├─ AppMetadataTests.cpp             # Product metadata contract
-│     └─ LaunchOptionsTests.cpp           # Launch parsing contract
+│     ├─ AppMetadataTests.cpp             # 产品元数据约定
+│     └─ LaunchOptionsTests.cpp           # 启动解析约定
 ├─ resources/
-│  └─ resources.qrc                       # Qt icon resources
+│  └─ resources.qrc                       # Qt 图标资源
 └─ legacy/
-   └─ README.md                           # Python tag and migration record
+   └─ README.md                           # Python 标签和迁移记录
 ```
 
 ---
 
-### Task 1: Preserve the Python prototype
+### 任务 1：保留 Python 原型
 
-**Files:**
-- Create: `legacy/README.md`
-- Verify: `docs/superpowers/specs/2026-09-02-cpp-rewrite-design.md`
+**文件：**
+- 新建：`legacy/README.md`
+- 验证：`docs/superpowers/specs/2026-09-02-cpp-rewrite-design.md`
 
-**Interfaces:**
-- Consumes: current clean Git `HEAD` containing the approved C++ rewrite design.
-- Produces: annotated tag `python-prototype-final` and a permanent recovery note.
+**接口：**
+- 输入：包含已批准 C++ 重构设计、工作区干净的当前 Git `HEAD`。
+- 输出：带注释的 `python-prototype-final` 标签和永久恢复说明。
 
-- [ ] **Step 1: Verify that the prototype can be tagged safely**
+- [ ] **步骤 1：确认原型可以安全打标签**
 
-Run:
+运行：
 
 ```powershell
 git status --porcelain
 git tag --list python-prototype-final
 ```
 
-Expected: both commands print no output. If the worktree is dirty, stop and identify every path before continuing. If the tag already exists, run `git show --stat python-prototype-final` and reuse it only when it resolves to the current Python prototype.
+预期：两条命令均不输出内容。如果工作区存在改动，停止操作并逐一确认所有路径后再继续。如果标签已经存在，运行 `git show --stat python-prototype-final`；只有当它确实指向当前 Python 原型时才允许复用。
 
-- [ ] **Step 2: Create the annotated recovery tag**
+- [ ] **步骤 2：创建带注释的恢复标签**
 
-Run:
+运行：
 
 ```powershell
 git tag -a python-prototype-final -m "Final Python prototype before the C++ rewrite"
 ```
 
-Expected: exit code 0.
+预期：退出码为 0。
 
-- [ ] **Step 3: Verify the tag target and tracked prototype files**
+- [ ] **步骤 3：验证标签目标和已跟踪的原型文件**
 
-Run:
+运行：
 
 ```powershell
 git show --no-patch --decorate python-prototype-final
 git ls-tree -r --name-only python-prototype-final -- python requirements.txt config.json
 ```
 
-Expected: the tag resolves to the approved design-era `HEAD`; the second command lists the Python sources, requirements, configuration, tracked bytecode, and the legacy `.pyd` binary.
+预期：标签解析到设计获批时的 `HEAD`；第二条命令列出 Python 源码、依赖文件、配置、已跟踪字节码及旧 `.pyd` 二进制文件。
 
-- [ ] **Step 4: Create the migration record with `apply_patch`**
+- [ ] **步骤 4：使用 `apply_patch` 创建迁移记录**
 
-Create `legacy/README.md` with this exact content:
+使用以下完整内容创建 `legacy/README.md`：
 
 ````markdown
-# Legacy Python prototype
+# 旧版 Python 原型
 
-The final Python implementation is preserved by the annotated Git tag
-`python-prototype-final`.
+最终 Python 实现保存在带注释的 Git 标签 `python-prototype-final` 中。
 
-To inspect it without changing the current branch:
+可使用以下命令查看内容，而不改变当前分支：
 
 ```powershell
 git show python-prototype-final:README.md
 git ls-tree -r --name-only python-prototype-final
 ```
 
-To run or modify the prototype, create a separate branch or worktree from the
-tag. The active `main` branch contains only the C++ implementation and does not
-maintain compatibility with the Python file layout or APIs.
+如需运行或修改原型，请从该标签创建单独的分支或工作树。当前 `main` 分支只包含
+C++ 实现，不维持与 Python 文件布局或 API 的兼容性。
 ````
 
-- [ ] **Step 5: Commit the recovery note**
+- [ ] **步骤 5：提交恢复说明**
 
-Run:
+运行：
 
 ```powershell
 git add legacy/README.md
 git commit -m "docs: preserve Python prototype recovery path"
 ```
 
-Expected: one commit containing only `legacy/README.md`; the annotated tag remains visible through `git tag --list`.
+预期：生成一个只包含 `legacy/README.md` 的提交；通过 `git tag --list` 仍能看到带注释标签。
 
 ---
 
-### Task 2: Establish the reproducible build toolchain
+### 任务 2：建立可复现的构建工具链
 
-**Files:**
-- Create: `CMakeLists.txt`
-- Create: `CMakePresets.json`
-- Create: `vcpkg.json`
-- Create: `.clang-format`
-- Create: `cmake/Warnings.cmake`
-- Create: `scripts/bootstrap.ps1`
-- Create: `src/CMakeLists.txt`
-- Create: `tests/CMakeLists.txt`
-- Modify: `.gitignore`
+**文件：**
+- 新建：`CMakeLists.txt`
+- 新建：`CMakePresets.json`
+- 新建：`vcpkg.json`
+- 新建：`.clang-format`
+- 新建：`cmake/Warnings.cmake`
+- 新建：`scripts/bootstrap.ps1`
+- 新建：`src/CMakeLists.txt`
+- 新建：`tests/CMakeLists.txt`
+- 修改：`.gitignore`
 
-**Interfaces:**
-- Consumes: Visual Studio 2022 at `D:\IDE\VisualStudio\Community` and CMake at `C:\Program Files\CMake\bin\cmake.exe`.
-- Produces: `windows-msvc-debug` configure/build/test presets and repository-local `.tools/vcpkg` dependencies.
+**接口：**
+- 输入：位于 `D:\IDE\VisualStudio\Community` 的 Visual Studio 2022，以及位于 `C:\Program Files\CMake\bin\cmake.exe` 的 CMake。
+- 输出：`windows-msvc-debug` 配置、构建和测试预设，以及仓库本地的 `.tools/vcpkg` 依赖环境。
 
-- [ ] **Step 1: Extend `.gitignore` with C++ build artifacts**
+- [ ] **步骤 1：在 `.gitignore` 中补充 C++ 构建产物**
 
-Append this exact block with `apply_patch`:
+使用 `apply_patch` 追加以下完整内容：
 
 ```gitignore
 
@@ -181,9 +179,9 @@ vcpkg_installed/
 *.tlog
 ```
 
-- [ ] **Step 2: Define manifest dependencies**
+- [ ] **步骤 2：定义清单依赖**
 
-Create `vcpkg.json`:
+创建 `vcpkg.json`：
 
 ```json
 {
@@ -209,11 +207,11 @@ Create `vcpkg.json`:
 }
 ```
 
-The vcpkg checkout tag, rather than an unpinned rolling installation, fixes `qtbase` at 6.8.2.
+通过固定 vcpkg 检出标签而不是使用未固定的滚动安装，将 `qtbase` 版本锁定为 6.8.2。
 
-- [ ] **Step 3: Add the vcpkg bootstrap script**
+- [ ] **步骤 3：添加 vcpkg 引导脚本**
 
-Create `scripts/bootstrap.ps1`:
+创建 `scripts/bootstrap.ps1`：
 
 ```powershell
 [CmdletBinding()]
@@ -253,9 +251,9 @@ if ($LASTEXITCODE -ne 0) {
 }
 ```
 
-- [ ] **Step 4: Define the CMake presets**
+- [ ] **步骤 4：定义 CMake 预设**
 
-Create `CMakePresets.json`:
+创建 `CMakePresets.json`：
 
 ```json
 {
@@ -299,9 +297,9 @@ Create `CMakePresets.json`:
 }
 ```
 
-- [ ] **Step 5: Define project warnings and formatting**
+- [ ] **步骤 5：定义项目警告策略和格式化规则**
 
-Create `cmake/Warnings.cmake`:
+创建 `cmake/Warnings.cmake`：
 
 ```cmake
 function(lc_enable_warnings target)
@@ -316,7 +314,7 @@ function(lc_enable_warnings target)
 endfunction()
 ```
 
-Create `.clang-format`:
+创建 `.clang-format`：
 
 ```yaml
 BasedOnStyle: LLVM
@@ -328,9 +326,9 @@ SortIncludes: CaseSensitive
 AllowShortFunctionsOnASingleLine: Empty
 ```
 
-- [ ] **Step 6: Define the root build contract**
+- [ ] **步骤 6：定义根构建约定**
 
-Create `CMakeLists.txt`:
+创建 `CMakeLists.txt`：
 
 ```cmake
 cmake_minimum_required(VERSION 3.28)
@@ -371,70 +369,70 @@ if(BUILD_TESTING)
 endif()
 ```
 
-Create `src/CMakeLists.txt`:
+创建 `src/CMakeLists.txt`：
 
 ```cmake
 # Application targets are introduced after the toolchain contract is verified.
 ```
 
-Create `tests/CMakeLists.txt`:
+创建 `tests/CMakeLists.txt`：
 
 ```cmake
 # Test targets are introduced with their corresponding production interfaces.
 ```
 
-- [ ] **Step 7: Bootstrap dependencies**
+- [ ] **步骤 7：引导并安装依赖**
 
-Run from the repository root:
+在仓库根目录运行：
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\bootstrap.ps1
 ```
 
-Expected: `.tools/vcpkg/vcpkg.exe` exists; vcpkg reports `qtbase:x64-windows` version 6.8.2 and completes all four manifest dependencies. This command downloads and builds dependencies, so execution requires network approval.
+预期：`.tools/vcpkg/vcpkg.exe` 存在；vcpkg 报告 `qtbase:x64-windows` 版本为 6.8.2，并完成清单中的四项依赖。该命令会下载并构建依赖，因此执行时需要网络访问授权。
 
-- [ ] **Step 8: Configure and build the empty project**
+- [ ] **步骤 8：配置并构建空工程**
 
-Run:
+运行：
 
 ```powershell
 cmake --preset windows-msvc-debug
 cmake --build --preset windows-msvc-debug
 ```
 
-Expected: configure reports Qt 6.8.2; build exits successfully without compiling an application target.
+预期：配置阶段报告使用 Qt 6.8.2；构建成功退出，且此时尚不编译应用目标。
 
-- [ ] **Step 9: Commit the build foundation**
+- [ ] **步骤 9：提交构建基础**
 
-Run:
+运行：
 
 ```powershell
 git add .gitignore .clang-format CMakeLists.txt CMakePresets.json vcpkg.json cmake scripts src/CMakeLists.txt tests/CMakeLists.txt
 git commit -m "build: establish C++20 Qt toolchain"
 ```
 
-Expected: one build-system commit; `.tools` and `out` remain untracked and ignored.
+预期：生成一个构建系统提交；`.tools` 和 `out` 仍未被跟踪且已被忽略。
 
 ---
 
-### Task 3: Add test-driven application contracts
+### 任务 3：以测试驱动方式建立应用接口约定
 
-**Files:**
-- Create: `src/app/AppMetadata.hpp`
-- Create: `src/app/LaunchOptions.hpp`
-- Create: `src/app/LaunchOptions.cpp`
-- Create: `tests/app/AppMetadataTests.cpp`
-- Create: `tests/app/LaunchOptionsTests.cpp`
-- Modify: `src/CMakeLists.txt`
-- Modify: `tests/CMakeLists.txt`
+**文件：**
+- 新建：`src/app/AppMetadata.hpp`
+- 新建：`src/app/LaunchOptions.hpp`
+- 新建：`src/app/LaunchOptions.cpp`
+- 新建：`tests/app/AppMetadataTests.cpp`
+- 新建：`tests/app/LaunchOptionsTests.cpp`
+- 修改：`src/CMakeLists.txt`
+- 修改：`tests/CMakeLists.txt`
 
-**Interfaces:**
-- Consumes: Qt 6 Core, the C++20 build contract, and Catch2 3.
-- Produces: `lc::app::AppMetadata`, `lc::app::LaunchMode`, and `lc::app::parseLaunchMode(std::span<const std::string_view>)`.
+**接口：**
+- 输入：Qt 6 Core、C++20 构建约定和 Catch2 3。
+- 输出：`lc::app::AppMetadata`、`lc::app::LaunchMode` 以及 `lc::app::parseLaunchMode(std::span<const std::string_view>)`。
 
-- [ ] **Step 1: Write failing metadata and launch-option tests**
+- [ ] **步骤 1：编写应当失败的元数据和启动参数测试**
 
-Create `tests/app/AppMetadataTests.cpp`:
+创建 `tests/app/AppMetadataTests.cpp`：
 
 ```cpp
 #include "app/AppMetadata.hpp"
@@ -448,7 +446,7 @@ TEST_CASE("application metadata is stable") {
 }
 ```
 
-Create `tests/app/LaunchOptionsTests.cpp`:
+创建 `tests/app/LaunchOptionsTests.cpp`：
 
 ```cpp
 #include "app/LaunchOptions.hpp"
@@ -472,9 +470,9 @@ TEST_CASE("unrelated arguments do not select smoke mode") {
 }
 ```
 
-Add `using namespace std::string_view_literals;` immediately after the includes in `LaunchOptionsTests.cpp` so the `sv` literals compile.
+在 `LaunchOptionsTests.cpp` 的头文件引用后立即添加 `using namespace std::string_view_literals;`，确保 `sv` 字面量可以编译。
 
-Replace `tests/CMakeLists.txt` with:
+将 `tests/CMakeLists.txt` 替换为：
 
 ```cmake
 add_executable(landscapecutter_unit_tests
@@ -493,19 +491,19 @@ include(Catch)
 catch_discover_tests(landscapecutter_unit_tests)
 ```
 
-- [ ] **Step 2: Run the build to verify the tests fail**
+- [ ] **步骤 2：运行构建并确认测试按预期失败**
 
-Run:
+运行：
 
 ```powershell
 cmake --build --preset windows-msvc-debug
 ```
 
-Expected: configure or build fails because `landscapecutter_app_core`, `AppMetadata.hpp`, and `LaunchOptions.hpp` do not exist.
+预期：由于 `landscapecutter_app_core`、`AppMetadata.hpp` 和 `LaunchOptions.hpp` 尚不存在，配置或构建失败。
 
-- [ ] **Step 3: Implement the minimal contracts**
+- [ ] **步骤 3：实现最小接口约定**
 
-Create `src/app/AppMetadata.hpp`:
+创建 `src/app/AppMetadata.hpp`：
 
 ```cpp
 #pragma once
@@ -523,7 +521,7 @@ struct AppMetadata final {
 } // namespace lc::app
 ```
 
-Create `src/app/LaunchOptions.hpp`:
+创建 `src/app/LaunchOptions.hpp`：
 
 ```cpp
 #pragma once
@@ -543,7 +541,7 @@ enum class LaunchMode {
 } // namespace lc::app
 ```
 
-Create `src/app/LaunchOptions.cpp`:
+创建 `src/app/LaunchOptions.cpp`：
 
 ```cpp
 #include "app/LaunchOptions.hpp"
@@ -560,7 +558,7 @@ LaunchMode parseLaunchMode(const std::span<const std::string_view> arguments) {
 } // namespace lc::app
 ```
 
-Replace `src/CMakeLists.txt` with:
+将 `src/CMakeLists.txt` 替换为：
 
 ```cmake
 add_library(landscapecutter_app_core STATIC
@@ -578,78 +576,78 @@ target_link_libraries(landscapecutter_app_core PUBLIC
 lc_enable_warnings(landscapecutter_app_core)
 ```
 
-- [ ] **Step 4: Build and run the focused tests**
+- [ ] **步骤 4：构建并运行定向测试**
 
-Run:
+运行：
 
 ```powershell
 cmake --build --preset windows-msvc-debug
 ctest --preset windows-msvc-debug -R "application metadata|launch" 
 ```
 
-Expected: three Catch2 test cases pass.
+预期：三个 Catch2 测试用例全部通过。
 
-- [ ] **Step 5: Format and re-run all tests**
+- [ ] **步骤 5：格式化代码并重新运行全部测试**
 
-Run the verified Visual Studio LLVM formatter:
+运行已确认存在的 Visual Studio LLVM 格式化程序：
 
 ```powershell
 & 'D:\IDE\VisualStudio\Community\VC\Tools\Llvm\x64\bin\clang-format.exe' -i src\app\AppMetadata.hpp src\app\LaunchOptions.hpp src\app\LaunchOptions.cpp tests\app\AppMetadataTests.cpp tests\app\LaunchOptionsTests.cpp
 ctest --preset windows-msvc-debug
 ```
 
-Expected: formatting changes no behavior; all discovered tests pass.
+预期：格式化不改变任何行为；所有已发现的测试全部通过。
 
-- [ ] **Step 6: Commit the tested contracts**
+- [ ] **步骤 6：提交经过测试的接口约定**
 
-Run:
+运行：
 
 ```powershell
 git add src/app src/CMakeLists.txt tests/app tests/CMakeLists.txt
 git commit -m "test: define application launch contracts"
 ```
 
-Expected: production interfaces and their tests land in the same commit.
+预期：生产接口及对应测试位于同一个提交中。
 
 ---
 
-### Task 4: Build the Qt tray application shell
+### 任务 4：构建 Qt 托盘应用空壳
 
-**Files:**
-- Create: `src/app/AppController.hpp`
-- Create: `src/app/AppController.cpp`
-- Create: `src/main.cpp`
-- Create: `resources/resources.qrc`
-- Modify: `src/CMakeLists.txt`
-- Modify: `tests/CMakeLists.txt`
+**文件：**
+- 新建：`src/app/AppController.hpp`
+- 新建：`src/app/AppController.cpp`
+- 新建：`src/main.cpp`
+- 新建：`resources/resources.qrc`
+- 修改：`src/CMakeLists.txt`
+- 修改：`tests/CMakeLists.txt`
 
-**Interfaces:**
-- Consumes: `lc::app::AppMetadata`, `lc::app::LaunchMode`, and `lc::app::parseLaunchMode` from Task 3.
-- Produces: `lc::app::AppController(QApplication&)`, `bool AppController::start()`, the `LandscapeCutter.exe` GUI target, and the `app_process_smoke` CTest.
+**接口：**
+- 输入：任务 3 生成的 `lc::app::AppMetadata`、`lc::app::LaunchMode` 和 `lc::app::parseLaunchMode`。
+- 输出：`lc::app::AppController(QApplication&)`、`bool AppController::start()`、`LandscapeCutter.exe` GUI 目标以及 `app_process_smoke` CTest。
 
-- [ ] **Step 1: Add a failing executable smoke test**
+- [ ] **步骤 1：添加应当失败的可执行文件冒烟测试**
 
-Append to `tests/CMakeLists.txt`:
+向 `tests/CMakeLists.txt` 追加：
 
 ```cmake
 add_test(NAME app_process_smoke COMMAND LandscapeCutter --smoke-test)
 set_tests_properties(app_process_smoke PROPERTIES TIMEOUT 10)
 ```
 
-- [ ] **Step 2: Run CMake to verify the smoke test cannot resolve the executable**
+- [ ] **步骤 2：运行 CMake 并确认冒烟测试无法解析可执行文件**
 
-Run:
+运行：
 
 ```powershell
 cmake --preset windows-msvc-debug
 ctest --preset windows-msvc-debug -R app_process_smoke
 ```
 
-Expected: the test is not runnable because the `LandscapeCutter` executable target does not exist.
+预期：由于 `LandscapeCutter` 可执行目标尚不存在，测试无法运行。
 
-- [ ] **Step 3: Add the Qt resource file**
+- [ ] **步骤 3：添加 Qt 资源文件**
 
-Create `resources/resources.qrc`:
+创建 `resources/resources.qrc`：
 
 ```xml
 <RCC>
@@ -659,9 +657,9 @@ Create `resources/resources.qrc`:
 </RCC>
 ```
 
-- [ ] **Step 4: Implement the tray controller**
+- [ ] **步骤 4：实现托盘控制器**
 
-Create `src/app/AppController.hpp`:
+创建 `src/app/AppController.hpp`：
 
 ```cpp
 #pragma once
@@ -691,7 +689,7 @@ private:
 } // namespace lc::app
 ```
 
-Create `src/app/AppController.cpp`:
+创建 `src/app/AppController.cpp`：
 
 ```cpp
 #include "app/AppController.hpp"
@@ -736,9 +734,9 @@ bool AppController::start() {
 } // namespace lc::app
 ```
 
-- [ ] **Step 5: Implement the application entry point**
+- [ ] **步骤 5：实现应用入口**
 
-Create `src/main.cpp`:
+创建 `src/main.cpp`：
 
 ```cpp
 #include "app/AppController.hpp"
@@ -789,9 +787,9 @@ int main(int argc, char* argv[]) {
 }
 ```
 
-- [ ] **Step 6: Add the executable target**
+- [ ] **步骤 6：添加可执行目标**
 
-Replace `src/CMakeLists.txt` with:
+将 `src/CMakeLists.txt` 替换为：
 
 ```cmake
 add_library(landscapecutter_app_core STATIC
@@ -832,9 +830,9 @@ target_link_libraries(LandscapeCutter PRIVATE
 lc_enable_warnings(LandscapeCutter)
 ```
 
-- [ ] **Step 7: Build and run automated tests**
+- [ ] **步骤 7：构建并运行自动化测试**
 
-Run:
+运行：
 
 ```powershell
 cmake --preset windows-msvc-debug
@@ -842,59 +840,59 @@ cmake --build --preset windows-msvc-debug
 ctest --preset windows-msvc-debug
 ```
 
-Expected: the unit tests and `app_process_smoke` pass. The process smoke test exits within 10 seconds without creating a tray icon.
+预期：单元测试和 `app_process_smoke` 均通过。进程冒烟测试在 10 秒内退出，且不会创建托盘图标。
 
-- [ ] **Step 8: Perform the interactive tray smoke test**
+- [ ] **步骤 8：执行交互式托盘冒烟测试**
 
-Run:
+运行：
 
 ```powershell
 & .\out\build\windows-msvc-debug\src\Debug\LandscapeCutter.exe
 ```
 
-Expected: one LandscapeCutter tray icon appears; a startup notification is shown when Windows notifications are enabled; selecting `退出` removes the tray icon and terminates the process.
+预期：出现一个 LandscapeCutter 托盘图标；Windows 通知启用时显示启动通知；选择 `退出` 后托盘图标消失且进程终止。
 
-- [ ] **Step 9: Commit the running shell**
+- [ ] **步骤 9：提交可运行的应用空壳**
 
-Run:
+运行：
 
 ```powershell
 git add src resources tests/CMakeLists.txt
 git commit -m "feat: add Qt tray application shell"
 ```
 
-Expected: the commit contains the executable, tray controller, resource file, and process smoke test.
+预期：提交中包含可执行程序、托盘控制器、资源文件和进程冒烟测试。
 
 ---
 
-### Task 5: Remove the active Python runtime and rewrite project documentation
+### 任务 5：移除当前 Python 运行实现并重写项目文档
 
-**Files:**
-- Delete: `python/Release/landscapecutter_core.cp310-win_amd64.pyd`
-- Delete: `python/__pycache__/capture_dxgi.cpython-39.pyc`
-- Delete: `python/__pycache__/capture_mss.cpython-39.pyc`
-- Delete: `python/__pycache__/config_manager.cpython-39.pyc`
-- Delete: `python/__pycache__/floating_window.cpython-39.pyc`
-- Delete: `python/__pycache__/region_selector.cpython-39.pyc`
-- Delete: `python/__pycache__/window_picker.cpython-39.pyc`
-- Delete: `python/capture_mss.py`
-- Delete: `python/floating_window.py`
-- Delete: `python/main.py`
-- Delete: `python/screen_selector.py`
-- Delete: `requirements.txt`
-- Delete: `config.json`
-- Delete: `docs/design.md`
-- Delete: `docs/technical_design.md`
-- Modify: `README.md`
-- Modify: `docs/后台窗口实时捕获问题与「伪最小化」解决方案说明.md`
+**文件：**
+- 删除：`python/Release/landscapecutter_core.cp310-win_amd64.pyd`
+- 删除：`python/__pycache__/capture_dxgi.cpython-39.pyc`
+- 删除：`python/__pycache__/capture_mss.cpython-39.pyc`
+- 删除：`python/__pycache__/config_manager.cpython-39.pyc`
+- 删除：`python/__pycache__/floating_window.cpython-39.pyc`
+- 删除：`python/__pycache__/region_selector.cpython-39.pyc`
+- 删除：`python/__pycache__/window_picker.cpython-39.pyc`
+- 删除：`python/capture_mss.py`
+- 删除：`python/floating_window.py`
+- 删除：`python/main.py`
+- 删除：`python/screen_selector.py`
+- 删除：`requirements.txt`
+- 删除：`config.json`
+- 删除：`docs/design.md`
+- 删除：`docs/technical_design.md`
+- 修改：`README.md`
+- 修改：`docs/后台窗口实时捕获问题与「伪最小化」解决方案说明.md`
 
-**Interfaces:**
-- Consumes: verified `python-prototype-final` tag and the passing C++ tray shell.
-- Produces: a C++-only active tree, accurate build instructions, and a clearly marked historical pseudo-minimize note.
+**接口：**
+- 输入：已经验证的 `python-prototype-final` 标签，以及测试通过的 C++ 托盘应用空壳。
+- 输出：只保留 C++ 运行实现的当前工作树、准确的构建说明，以及明确标记为历史资料的伪最小化说明。
 
-- [ ] **Step 1: Reconfirm recoverability before deletion**
+- [ ] **步骤 1：删除前再次确认可恢复性**
 
-Run:
+运行：
 
 ```powershell
 git show --no-patch python-prototype-final
@@ -902,21 +900,21 @@ git ls-tree -r --name-only python-prototype-final -- python requirements.txt con
 git status --porcelain
 ```
 
-Expected: the tag exposes every file listed for deletion and the current worktree is clean. Stop if either condition is false.
+预期：标签中可以找到所有待删除文件，且当前工作区干净。任一条件不满足都必须停止。
 
-- [ ] **Step 2: Remove the exact tracked Python runtime paths**
+- [ ] **步骤 2：删除明确列出的 Git 已跟踪 Python 运行路径**
 
-Run from PowerShell without globs:
+在 PowerShell 中运行，禁止使用通配符：
 
 ```powershell
 git rm -- python/Release/landscapecutter_core.cp310-win_amd64.pyd python/__pycache__/capture_dxgi.cpython-39.pyc python/__pycache__/capture_mss.cpython-39.pyc python/__pycache__/config_manager.cpython-39.pyc python/__pycache__/floating_window.cpython-39.pyc python/__pycache__/region_selector.cpython-39.pyc python/__pycache__/window_picker.cpython-39.pyc python/capture_mss.py python/floating_window.py python/main.py python/screen_selector.py requirements.txt config.json docs/design.md docs/technical_design.md
 ```
 
-Expected: Git stages only the listed deletions. Recovery remains available through `python-prototype-final`.
+预期：Git 只暂存列出的删除操作。所有内容仍可通过 `python-prototype-final` 恢复。
 
-- [ ] **Step 3: Replace `README.md` with the current product contract**
+- [ ] **步骤 3：使用当前产品约定替换 `README.md`**
 
-Use `apply_patch` to replace the file with:
+使用 `apply_patch` 将文件替换为以下英文内容。README 面向公开 GitHub 受众，因此保留英文以提高国际用户的可读性和搜索可发现性：
 
 ````markdown
 # LandscapeCutter
@@ -985,9 +983,9 @@ file is added as part of release preparation. Do not redistribute binaries as
 an official release before that decision is recorded.
 ````
 
-- [ ] **Step 4: Mark the pseudo-minimize document as historical**
+- [ ] **步骤 4：将伪最小化文档标记为历史资料**
 
-Insert this block immediately below its title:
+在标题正下方插入以下内容：
 
 ```markdown
 
@@ -997,9 +995,9 @@ Insert this block immediately below its title:
 > `docs/superpowers/specs/2026-09-02-cpp-rewrite-design.md` 为准。
 ```
 
-- [ ] **Step 5: Verify that the active tree contains no Python runtime**
+- [ ] **步骤 5：确认当前工作树不再包含 Python 运行实现**
 
-Run:
+运行：
 
 ```powershell
 git ls-files -- python requirements.txt config.json
@@ -1008,33 +1006,33 @@ cmake --build --preset windows-msvc-debug
 ctest --preset windows-msvc-debug
 ```
 
-Expected: the first command prints nothing; diff validation is clean; the C++ build and all tests pass.
+预期：第一条命令不输出内容；差异检查无问题；C++ 构建及全部测试通过。
 
-- [ ] **Step 6: Commit the C++-only active tree**
+- [ ] **步骤 6：提交只保留 C++ 运行实现的当前工作树**
 
-Run:
+运行：
 
 ```powershell
 git add README.md docs/后台窗口实时捕获问题与「伪最小化」解决方案说明.md
 git commit -m "refactor: retire Python runtime from main"
 ```
 
-Expected: the commit includes the staged deletions, current README, and historical-document disclaimer.
+预期：提交中包含已暂存的删除操作、当前 README 以及历史文档免责声明。
 
 ---
 
-### Task 6: Verify Milestone 0 from a clean build directory
+### 任务 6：从干净构建目录验证里程碑 0
 
-**Files:**
-- Verify: all files created or modified in Tasks 1–5.
+**文件：**
+- 验证：任务 1 至任务 5 中创建或修改的全部文件。
 
-**Interfaces:**
-- Consumes: completed Milestone 0 commits.
-- Produces: evidence that a fresh dependency/build/test/run cycle succeeds and that the prototype remains recoverable.
+**接口：**
+- 输入：已经完成的里程碑 0 各项提交。
+- 输出：证明全新的依赖、构建、测试和运行周期能够成功，且 Python 原型仍可恢复的验证证据。
 
-- [ ] **Step 1: Verify repository and tag state**
+- [ ] **步骤 1：验证仓库与标签状态**
 
-Run:
+运行：
 
 ```powershell
 git status --short --branch
@@ -1042,11 +1040,11 @@ git tag --list python-prototype-final
 git log --oneline --decorate -6
 ```
 
-Expected: the worktree is clean, the tag exists, and the milestone commits are visible in order.
+预期：工作区干净、标签存在，并且各里程碑提交按顺序可见。
 
-- [ ] **Step 2: Remove only the verified generated build directory**
+- [ ] **步骤 2：只删除已经验证的生成构建目录**
 
-Resolve and verify the exact target before deletion:
+删除前解析并验证准确目标：
 
 ```powershell
 $buildPath = (Resolve-Path -LiteralPath .\out\build\windows-msvc-debug).Path
@@ -1057,11 +1055,11 @@ if (-not $buildPath.StartsWith((Join-Path $repositoryPath "out\build"), [System.
 Remove-Item -LiteralPath $buildPath -Recurse -Force
 ```
 
-Expected: only `out/build/windows-msvc-debug` is removed. `.tools/vcpkg` and source files remain untouched.
+预期：只有 `out/build/windows-msvc-debug` 被删除；`.tools/vcpkg` 和源文件保持不变。
 
-- [ ] **Step 3: Reconfigure, rebuild, and test from scratch**
+- [ ] **步骤 3：从零重新配置、构建和测试**
 
-Run:
+运行：
 
 ```powershell
 cmake --preset windows-msvc-debug
@@ -1069,34 +1067,34 @@ cmake --build --preset windows-msvc-debug
 ctest --preset windows-msvc-debug
 ```
 
-Expected: configuration selects Qt 6.8.2; the full build succeeds; metadata, launch-option, and process-smoke tests pass.
+预期：配置选择 Qt 6.8.2；完整构建成功；元数据、启动参数和进程冒烟测试全部通过。
 
-- [ ] **Step 4: Repeat the interactive acceptance check**
+- [ ] **步骤 4：再次执行交互式验收检查**
 
-Run:
+运行：
 
 ```powershell
 & .\out\build\windows-msvc-debug\src\Debug\LandscapeCutter.exe
 ```
 
-Expected: the tray icon and startup notification appear; `退出` closes the process without leaving a tray ghost.
+预期：托盘图标和启动通知出现；选择 `退出` 后进程关闭，不残留失效托盘图标。
 
-- [ ] **Step 5: Record final verification without creating a no-op commit**
+- [ ] **步骤 5：记录最终验证结果，不创建无内容提交**
 
-Run:
+运行：
 
 ```powershell
 git status --porcelain
 git diff --check
 ```
 
-Expected: both commands print no output. Milestone 0 is complete when all earlier expected results are satisfied; no additional commit is needed.
+预期：两条命令均不输出内容。前述所有预期结果均满足后，里程碑 0 即告完成，无需额外提交。
 
-## Milestone 0 Exit Criteria
+## 里程碑 0 退出条件
 
-- `python-prototype-final` recovers the complete Python prototype.
-- The active branch contains no Python runtime, requirements file, stale JSON runtime configuration, tracked `.pyc`, or tracked `.pyd`.
-- vcpkg is pinned to tag 2025.02.14 and resolves Qt 6.8.2 dynamically for `x64-windows`.
-- `cmake --preset windows-msvc-debug`, build, and CTest all pass from a clean build directory.
-- `LandscapeCutter.exe` starts as a system-tray application and exits from its tray menu.
-- README, legacy note, and historical pseudo-minimize note match the approved C++ design.
+- `python-prototype-final` 可以恢复完整 Python 原型。
+- 当前分支不包含 Python 运行实现、依赖文件、过期 JSON 运行配置、已跟踪 `.pyc` 或已跟踪 `.pyd`。
+- vcpkg 固定到标签 2025.02.14，并为 `x64-windows` 动态解析 Qt 6.8.2。
+- 在干净构建目录中，`cmake --preset windows-msvc-debug`、构建和 CTest 全部通过。
+- `LandscapeCutter.exe` 以系统托盘应用启动，并能通过托盘菜单退出。
+- README、旧版说明和历史伪最小化说明与已批准的 C++ 设计一致。
