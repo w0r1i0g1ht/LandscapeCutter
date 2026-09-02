@@ -223,18 +223,33 @@ Shift+F1
 
 ## 10. 工程基线
 
-- 编译器：Visual Studio 2022 MSVC v143。
+- 编译器：Visual Studio 2026 MSVC 14.5x；里程碑 0 使用已安装的稳定版
+  Visual Studio 18 实例进行构建和测试。
 - 语言标准：C++20。
 - 最低系统：Windows 10 1903。
 - SDK 下限：Windows SDK 10.0.19041。
 - UI：Qt 6.8 系列，LGPL 动态链接。
-- 构建：CMake Presets，支持 Ninja 和 Visual Studio 生成器。
-- 依赖管理：vcpkg manifest。
+- 构建：CMake 4.4 及以上版本和 CMake Presets；Windows 主预设使用
+  `Visual Studio 18 2026` 生成器与 x64 架构。
+- 依赖管理：vcpkg manifest；vcpkg 固定到标签 `2026.07.29`，对应提交
+  `c76c06644034521fb761a39f8f52d8e87d1103d5`。
 - Windows 资源管理：WIL。
 - 日志：spdlog 滚动日志。
 - 测试：Catch2。
 - 格式化：clang-format，格式规则纳入仓库。
 - 目标架构：首版只发布 x64。
+
+### 10.1 工具链固定策略
+
+- 继续使用动态链接的 `x64-windows` triplet，不引入静态 Qt 发布方式。
+- `vcpkg.json` 使用上述提交作为 `builtin-baseline`，并通过版本 override
+  将 `qtbase` 固定为 `6.8.2#2`；不得直接采用该 baseline 默认的 Qt 6.11。
+- 根 CMake 配置继续拒绝 Qt 6.9 及以上版本，并验证实际解析结果为 Qt 6.8.2。
+- 引导脚本必须验证本地 vcpkg 检出恰好位于标签 `2026.07.29`，不能使用
+  未固定的 `master` 或滚动安装。
+- 本次修订复用现有 Visual Studio 2026，不安装 Visual Studio 2022 Build Tools，
+  也不通过补丁伪装旧 vcpkg 对 VS 18 的支持。
+- 未来可以增加 VS 2022 或 Ninja 兼容预设，但它们不属于里程碑 0 的验收范围。
 
 ## 11. 测试策略
 
