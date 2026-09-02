@@ -7,7 +7,7 @@
 - 执行分支：`codex/cpp-foundation`
 - 隔离工作树：`D:\Projects\LandscapeCutter\.worktrees\cpp-foundation`
 - 执行方式：每个任务由独立子代理实施，随后进行规格符合性与代码质量审查
-- 当前状态：执行中
+- 当前状态：等待 Visual Studio 2022 环境授权
 - 完成度：1 / 6
 
 ## 任务状态
