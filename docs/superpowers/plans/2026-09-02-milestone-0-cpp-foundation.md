@@ -179,7 +179,7 @@ vcpkg_installed/
 *.tlog
 ```
 
-- [ ] **步骤 2：定义清单依赖**
+- [x] **步骤 2：定义清单依赖**
 
 将 `vcpkg.json` 替换为：
 
@@ -218,7 +218,7 @@ vcpkg_installed/
 `builtin-baseline` 必须对应 vcpkg 标签 `2026.07.29`。该 baseline 默认提供 Qt 6.11，
 因此必须保留 `qtbase 6.8.2#2` override；不得依赖默认版本或未固定的滚动安装。
 
-- [ ] **步骤 3：更新 vcpkg 引导脚本**
+- [x] **步骤 3：更新 vcpkg 引导脚本**
 
 将 `scripts/bootstrap.ps1` 替换为：
 
@@ -266,7 +266,7 @@ if ($LASTEXITCODE -ne 0) {
 使用完整的固定标签克隆，而不是浅克隆；`qtbase 6.8.2#2` override 需要历史 port
 tree，完整历史确保单条 bootstrap 命令可复现地解析该版本。
 
-- [ ] **步骤 4：更新 CMake 预设**
+- [x] **步骤 4：更新 CMake 预设**
 
 将 `CMakePresets.json` 替换为：
 
@@ -342,7 +342,7 @@ SortIncludes: CaseSensitive
 AllowShortFunctionsOnASingleLine: Empty
 ```
 
-- [ ] **步骤 6：更新根构建约定**
+- [x] **步骤 6：更新根构建约定**
 
 将 `CMakeLists.txt` 替换为：
 
@@ -413,7 +413,7 @@ endif()
 # Test targets are introduced with their corresponding production interfaces.
 ```
 
-- [ ] **步骤 7：安全移除不兼容的旧 vcpkg 检出**
+- [x] **步骤 7：安全移除不兼容的旧 vcpkg 检出**
 
 在仓库根目录运行以下 PowerShell。只允许删除仓库 `.tools` 下已经确认不是
 `2026.07.29` 的 vcpkg 生成目录：
@@ -439,7 +439,7 @@ if (Test-Path -LiteralPath $vcpkgPath) {
 预期：旧 `2025.02.14` 检出被删除，仓库源文件和 `.tools` 之外的路径不受影响。
 如果目录已经是 `2026.07.29`，则保留并复用。
 
-- [ ] **步骤 8：引导并安装依赖**
+- [x] **步骤 8：引导并安装依赖**
 
 在仓库根目录运行：
 
@@ -451,7 +451,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\bootstrap.ps1
 Visual Studio 18，并报告 `qtbase:x64-windows` 版本为 `6.8.2#2`；清单中的四项
 直接依赖及其传递依赖全部安装完成。该命令会下载并构建依赖，因此执行时需要网络访问授权。
 
-- [ ] **步骤 9：配置并构建空工程**
+- [x] **步骤 9：配置并构建空工程**
 
 运行：
 
@@ -462,7 +462,7 @@ cmake --build --preset windows-msvc-debug
 
 预期：配置阶段报告使用 Qt 6.8.2；构建成功退出，且此时尚不编译应用目标。
 
-- [ ] **步骤 10：提交 VS 2026 工具链修订**
+- [x] **步骤 10：提交 VS 2026 工具链修订**
 
 运行：
 

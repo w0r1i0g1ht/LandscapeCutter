@@ -7,15 +7,15 @@
 - 执行分支：`codex/cpp-foundation`
 - 隔离工作树：`D:\Projects\LandscapeCutter\.worktrees\cpp-foundation`
 - 执行方式：每个任务由独立子代理实施，随后进行规格符合性与代码质量审查
-- 当前状态：工具链计划修订完成，等待恢复 Task 2
-- 完成度：1 / 6
+- 当前状态：Task 3 执行准备中
+- 完成度：2 / 6
 
 ## 任务状态
 
 | 任务 | 状态 | 实施提交 | 审查结果 |
 |---|---|---|---|
 | 任务 1：保留 Python 原型 | 已完成 | `bdb76c8` | 规格符合、质量通过 |
-| 任务 2：建立可复现的构建工具链 | 待恢复实施 | `c04fcb4`、`222ddd5` | VS 2026 设计已确认；修订计划已完成 |
+| 任务 2：建立可复现的构建工具链 | 已完成 | `c04fcb4`、`222ddd5`、`6c8555d`、`8ef5741` | 规格符合、质量通过（2 轮修复） |
 | 任务 3：以测试驱动方式建立应用接口约定 | 未开始 | — | — |
 | 任务 4：构建 Qt 托盘应用空壳 | 未开始 | — | — |
 | 任务 5：移除当前 Python 运行实现并重写项目文档 | 未开始 | — | — |
@@ -34,6 +34,10 @@
 - 2026-09-02：任务 2 第 1 轮修复提交 `222ddd5` 已通过范围复审；两个发现均已解决且未引入新问题。任务仍等待 VS 2022/17.x，以完成依赖安装、配置和构建验收。
 - 2026-09-02：用户批准复用现有 Visual Studio 2026，不再安装 VS 2022 Build Tools；工具链修订为 CMake 4.4+、vcpkg `2026.07.29` 和 Qt 6.8.2 override。
 - 2026-09-02：用户确认书面设计修订；中文实施计划已改为 VS 2026，并重新打开 Task 2 中受工具链变化影响的步骤。
+- 2026-09-02：已恢复 Task 2 原实施子代理，开始迁移 vcpkg、安装 Qt 6.8.2#2 并验证 VS 2026 空工程构建。
+- 2026-09-02：VS 2026 工具链修订提交 `6c8555d`；依赖安装、CMake 配置和空工程构建已成功，现进入独立审查。
+- 2026-09-02：Task 2 独立审查发现 clean bootstrap 的浅克隆无法解析历史 Qt port tree（Critical）；已裁定改为完整固定标签克隆并进入第 2 轮修复。
+- 2026-09-02：Task 2 第 2 轮修复提交 `8ef5741` 已通过范围复审；clean bootstrap、依赖解析、配置和构建全部通过，Task 2 完成。
 
 ## 当前阻塞
 
@@ -50,3 +54,8 @@
 - 任务 2：第 1 轮范围复审结论为“全部发现已解决，无新的 Critical/Important 问题”。
 - 工具链修订探测：CMake 4.4.3 已提供 `Visual Studio 18 2026` 生成器；vcpkg `2026.07.29` 的构建脚本识别 `VisualStudioVersion` 18.x。
 - 工具链修订探测：vcpkg `2026.07.29` 的版本数据库保留 `qtbase 6.8.2`，最高 port-version 为 2，可在新 baseline 上显式 override。
+- Task 2 实际验证：CMake 使用 VS18、MSVC 19.51.36256、Windows SDK 10.0.28000.0，并成功解析 `qtbase 6.8.2#2`。
+- Task 2 实际验证：`cmake --preset windows-msvc-debug` 和授权后的 `cmake --build --preset windows-msvc-debug` 均成功。
+- Task 2 中间审查事项（已解决）：`--depth 1` 克隆无法直接解析 Qt 6.8.2#2 历史 port tree，本次通过补全 vcpkg 历史后成功。
+- Task 2 最终验证：从空 `.tools/vcpkg` 运行单条无参数 bootstrap，无需手工补历史即可解析 `qtbase 6.8.2#2`；vcpkg 仓库不是浅克隆。
+- Task 2 最终审查：浅克隆 Critical 已解决，无新的 Critical、Important、Minor 或范围外问题。
