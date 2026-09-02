@@ -33,6 +33,7 @@ ehthumbs.db
 Release/
 build/
 dist/
+.worktrees/
 *.egg-info/
 *.pyd
 
