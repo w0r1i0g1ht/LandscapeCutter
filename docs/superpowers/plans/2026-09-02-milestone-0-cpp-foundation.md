@@ -955,7 +955,7 @@ git commit -m "feat: add Qt tray application shell"
 - 输入：已经验证的 `python-prototype-final` 标签，以及测试通过的 C++ 托盘应用空壳。
 - 输出：只保留 C++ 运行实现的当前工作树、准确的构建说明，以及明确标记为历史资料的伪最小化说明。
 
-- [ ] **步骤 1：删除前再次确认可恢复性**
+- [x] **步骤 1：删除前再次确认可恢复性**
 
 运行：
 
@@ -967,7 +967,7 @@ git status --porcelain
 
 预期：标签中可以找到所有待删除文件，且当前工作区干净。任一条件不满足都必须停止。
 
-- [ ] **步骤 2：删除明确列出的 Git 已跟踪 Python 运行路径**
+- [x] **步骤 2：删除明确列出的 Git 已跟踪 Python 运行路径**
 
 在 PowerShell 中运行，禁止使用通配符：
 
@@ -977,7 +977,7 @@ git rm -- python/Release/landscapecutter_core.cp310-win_amd64.pyd python/__pycac
 
 预期：Git 只暂存列出的删除操作。所有内容仍可通过 `python-prototype-final` 恢复。
 
-- [ ] **步骤 3：使用当前产品约定替换 `README.md`**
+- [x] **步骤 3：使用当前产品约定替换 `README.md`**
 
 使用 `apply_patch` 将文件替换为以下英文内容。README 面向公开 GitHub 受众，因此保留英文以提高国际用户的可读性和搜索可发现性：
 
@@ -1048,7 +1048,7 @@ file is added as part of release preparation. Do not redistribute binaries as
 an official release before that decision is recorded.
 ````
 
-- [ ] **步骤 4：将伪最小化文档标记为历史资料**
+- [x] **步骤 4：将伪最小化文档标记为历史资料**
 
 在标题正下方插入以下内容：
 
@@ -1060,7 +1060,7 @@ an official release before that decision is recorded.
 > `docs/superpowers/specs/2026-09-02-cpp-rewrite-design.md` 为准。
 ```
 
-- [ ] **步骤 5：确认当前工作树不再包含 Python 运行实现**
+- [x] **步骤 5：确认当前工作树不再包含 Python 运行实现**
 
 运行：
 
@@ -1073,7 +1073,7 @@ ctest --preset windows-msvc-debug
 
 预期：第一条命令不输出内容；差异检查无问题；C++ 构建及全部测试通过。
 
-- [ ] **步骤 6：提交只保留 C++ 运行实现的当前工作树**
+- [x] **步骤 6：提交只保留 C++ 运行实现的当前工作树**
 
 运行：
 
