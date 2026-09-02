@@ -686,7 +686,7 @@ git commit -m "test: define application launch contracts"
 - 输入：任务 3 生成的 `lc::app::AppMetadata`、`lc::app::LaunchMode` 和 `lc::app::parseLaunchMode`。
 - 输出：`lc::app::AppController(QApplication&)`、`bool AppController::start()`、`LandscapeCutter.exe` GUI 目标以及 `app_process_smoke` CTest。
 
-- [ ] **步骤 1：添加应当失败的可执行文件冒烟测试**
+- [x] **步骤 1：添加应当失败的可执行文件冒烟测试**
 
 向 `tests/CMakeLists.txt` 追加：
 
@@ -695,7 +695,7 @@ add_test(NAME app_process_smoke COMMAND LandscapeCutter --smoke-test)
 set_tests_properties(app_process_smoke PROPERTIES TIMEOUT 10)
 ```
 
-- [ ] **步骤 2：运行 CMake 并确认冒烟测试无法解析可执行文件**
+- [x] **步骤 2：运行 CMake 并确认冒烟测试无法解析可执行文件**
 
 运行：
 
@@ -706,7 +706,7 @@ ctest --preset windows-msvc-debug -R app_process_smoke
 
 预期：由于 `LandscapeCutter` 可执行目标尚不存在，测试无法运行。
 
-- [ ] **步骤 3：添加 Qt 资源文件**
+- [x] **步骤 3：添加 Qt 资源文件**
 
 创建 `resources/resources.qrc`：
 
@@ -718,7 +718,7 @@ ctest --preset windows-msvc-debug -R app_process_smoke
 </RCC>
 ```
 
-- [ ] **步骤 4：实现托盘控制器**
+- [x] **步骤 4：实现托盘控制器**
 
 创建 `src/app/AppController.hpp`：
 
@@ -795,7 +795,7 @@ bool AppController::start() {
 } // namespace lc::app
 ```
 
-- [ ] **步骤 5：实现应用入口**
+- [x] **步骤 5：实现应用入口**
 
 创建 `src/main.cpp`：
 
@@ -848,7 +848,7 @@ int main(int argc, char* argv[]) {
 }
 ```
 
-- [ ] **步骤 6：添加可执行目标**
+- [x] **步骤 6：添加可执行目标**
 
 将 `src/CMakeLists.txt` 替换为：
 
@@ -891,7 +891,7 @@ target_link_libraries(LandscapeCutter PRIVATE
 lc_enable_warnings(LandscapeCutter)
 ```
 
-- [ ] **步骤 7：构建并运行自动化测试**
+- [x] **步骤 7：构建并运行自动化测试**
 
 运行：
 
@@ -905,6 +905,10 @@ ctest --preset windows-msvc-debug
 
 - [ ] **步骤 8：执行交互式托盘冒烟测试**
 
+当前执行桌面未提供 `Shell_TrayWnd`、`Shell_SecondaryTrayWnd` 或
+`NotifyIconOverflowWindow`，应用按设计显示“系统托盘不可用”并退出。该交互验收保留到
+任务 6，在具备 Windows 通知区域的桌面环境中执行。
+
 运行：
 
 ```powershell
@@ -913,7 +917,7 @@ ctest --preset windows-msvc-debug
 
 预期：出现一个 LandscapeCutter 托盘图标；Windows 通知启用时显示启动通知；选择 `退出` 后托盘图标消失且进程终止。
 
-- [ ] **步骤 9：提交可运行的应用空壳**
+- [x] **步骤 9：提交可运行的应用空壳**
 
 运行：
 
