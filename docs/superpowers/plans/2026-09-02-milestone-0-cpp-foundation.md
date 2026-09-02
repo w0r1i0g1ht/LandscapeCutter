@@ -242,7 +242,7 @@ $bootstrap = Join-Path $resolvedRoot "bootstrap-vcpkg.bat"
 $executable = Join-Path $resolvedRoot "vcpkg.exe"
 
 if (-not (Test-Path -LiteralPath $resolvedRoot)) {
-    git clone --branch $vcpkgTag --depth 1 https://github.com/microsoft/vcpkg.git $resolvedRoot
+    git clone --branch $vcpkgTag https://github.com/microsoft/vcpkg.git $resolvedRoot
 } elseif (-not (Test-Path -LiteralPath $gitDirectory)) {
     throw "The vcpkg directory exists but is not a Git checkout: $resolvedRoot"
 }
@@ -262,6 +262,9 @@ if ($LASTEXITCODE -ne 0) {
     throw "vcpkg dependency installation failed with exit code $LASTEXITCODE."
 }
 ```
+
+使用完整的固定标签克隆，而不是浅克隆；`qtbase 6.8.2#2` override 需要历史 port
+tree，完整历史确保单条 bootstrap 命令可复现地解析该版本。
 
 - [ ] **步骤 4：更新 CMake 预设**
 

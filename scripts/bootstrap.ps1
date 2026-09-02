@@ -17,7 +17,7 @@ $bootstrap = Join-Path $resolvedRoot "bootstrap-vcpkg.bat"
 $executable = Join-Path $resolvedRoot "vcpkg.exe"
 
 if (-not (Test-Path -LiteralPath $resolvedRoot)) {
-    git clone --branch $vcpkgTag --depth 1 https://github.com/microsoft/vcpkg.git $resolvedRoot
+    git clone --branch $vcpkgTag https://github.com/microsoft/vcpkg.git $resolvedRoot
 } elseif (-not (Test-Path -LiteralPath $gitDirectory)) {
     throw "The vcpkg directory exists but is not a Git checkout: $resolvedRoot"
 }
