@@ -153,7 +153,7 @@ git commit -m "docs: preserve Python prototype recovery path"
 - 输入：位于 `D:\IDE\VisualStudio\Community` 的 Visual Studio 2022，以及位于 `C:\Program Files\CMake\bin\cmake.exe` 的 CMake。
 - 输出：`windows-msvc-debug` 配置、构建和测试预设，以及仓库本地的 `.tools/vcpkg` 依赖环境。
 
-- [ ] **步骤 1：在 `.gitignore` 中补充 C++ 构建产物**
+- [x] **步骤 1：在 `.gitignore` 中补充 C++ 构建产物**
 
 使用 `apply_patch` 追加以下完整内容：
 
@@ -179,7 +179,7 @@ vcpkg_installed/
 *.tlog
 ```
 
-- [ ] **步骤 2：定义清单依赖**
+- [x] **步骤 2：定义清单依赖**
 
 创建 `vcpkg.json`：
 
@@ -209,7 +209,7 @@ vcpkg_installed/
 
 通过固定 vcpkg 检出标签而不是使用未固定的滚动安装，将 `qtbase` 版本锁定为 6.8.2。
 
-- [ ] **步骤 3：添加 vcpkg 引导脚本**
+- [x] **步骤 3：添加 vcpkg 引导脚本**
 
 创建 `scripts/bootstrap.ps1`：
 
@@ -254,7 +254,7 @@ if ($LASTEXITCODE -ne 0) {
 }
 ```
 
-- [ ] **步骤 4：定义 CMake 预设**
+- [x] **步骤 4：定义 CMake 预设**
 
 创建 `CMakePresets.json`：
 
@@ -300,7 +300,7 @@ if ($LASTEXITCODE -ne 0) {
 }
 ```
 
-- [ ] **步骤 5：定义项目警告策略和格式化规则**
+- [x] **步骤 5：定义项目警告策略和格式化规则**
 
 创建 `cmake/Warnings.cmake`：
 
@@ -329,7 +329,7 @@ SortIncludes: CaseSensitive
 AllowShortFunctionsOnASingleLine: Empty
 ```
 
-- [ ] **步骤 6：定义根构建约定**
+- [x] **步骤 6：定义根构建约定**
 
 创建 `CMakeLists.txt`：
 
@@ -405,7 +405,7 @@ cmake --build --preset windows-msvc-debug
 
 预期：配置阶段报告使用 Qt 6.8.2；构建成功退出，且此时尚不编译应用目标。
 
-- [ ] **步骤 9：提交构建基础**
+- [x] **步骤 9：提交构建基础**
 
 运行：
 
