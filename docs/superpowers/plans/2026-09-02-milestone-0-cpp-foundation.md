@@ -491,7 +491,7 @@ git commit -m "build: adopt Visual Studio 2026 toolchain"
 - 输入：Qt 6 Core、C++20 构建约定和 Catch2 3。
 - 输出：`lc::app::AppMetadata`、`lc::app::LaunchMode` 以及 `lc::app::parseLaunchMode(std::span<const std::string_view>)`。
 
-- [ ] **步骤 1：编写应当失败的元数据和启动参数测试**
+- [x] **步骤 1：编写应当失败的元数据和启动参数测试**
 
 创建 `tests/app/AppMetadataTests.cpp`：
 
@@ -552,7 +552,7 @@ include(Catch)
 catch_discover_tests(landscapecutter_unit_tests)
 ```
 
-- [ ] **步骤 2：运行构建并确认测试按预期失败**
+- [x] **步骤 2：运行构建并确认测试按预期失败**
 
 运行：
 
@@ -562,7 +562,7 @@ cmake --build --preset windows-msvc-debug
 
 预期：由于 `landscapecutter_app_core`、`AppMetadata.hpp` 和 `LaunchOptions.hpp` 尚不存在，配置或构建失败。
 
-- [ ] **步骤 3：实现最小接口约定**
+- [x] **步骤 3：实现最小接口约定**
 
 创建 `src/app/AppMetadata.hpp`：
 
@@ -637,7 +637,7 @@ target_link_libraries(landscapecutter_app_core PUBLIC
 lc_enable_warnings(landscapecutter_app_core)
 ```
 
-- [ ] **步骤 4：构建并运行定向测试**
+- [x] **步骤 4：构建并运行定向测试**
 
 运行：
 
@@ -648,7 +648,7 @@ ctest --preset windows-msvc-debug -R "^(application metadata is stable|normal la
 
 预期：四个 Catch2 测试用例全部通过。
 
-- [ ] **步骤 5：格式化代码并重新运行全部测试**
+- [x] **步骤 5：格式化代码并重新运行全部测试**
 
 运行已确认存在的 Visual Studio LLVM 格式化程序：
 
@@ -659,7 +659,7 @@ ctest --preset windows-msvc-debug
 
 预期：格式化不改变任何行为；所有已发现的测试全部通过。
 
-- [ ] **步骤 6：提交经过测试的接口约定**
+- [x] **步骤 6：提交经过测试的接口约定**
 
 运行：
 
