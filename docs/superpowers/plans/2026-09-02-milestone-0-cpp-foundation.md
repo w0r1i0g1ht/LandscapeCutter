@@ -6,7 +6,7 @@
 
 **架构：** 本里程碑只建立应用空壳和工程基础。使用 CMake 与仓库本地、固定标签的 vcpkg 构建 Qt Widgets 托盘进程；捕获、标注和贴图等功能模块不在本计划范围内，将在后续里程碑计划中分别实现。
 
-**技术栈：** Visual Studio 2022 MSVC v143、C++20、Windows SDK 10.0.19041+、Qt 6.8.2 动态库、CMake 3.28+、vcpkg 2025.02.14、WIL、spdlog、Catch2。
+**技术栈：** Visual Studio 2026 MSVC 14.5x、C++20、Windows SDK 10.0.19041+、Qt 6.8.2 动态库、CMake 4.4+、vcpkg 2026.07.29、WIL、spdlog、Catch2。
 
 **设计文档：** `docs/superpowers/specs/2026-09-02-cpp-rewrite-design.md`
 
@@ -15,7 +15,7 @@
 - 目标系统为 Windows 10 1903 及以上版本，包括 Windows 11。
 - 首个版本只发布并测试 x64 架构。
 - 使用符合 LGPL 动态链接要求的 Qt 6.8 系列。
-- 使用 MSVC 2022、C++20 语言标准以及 Windows SDK 10.0.19041 或更高版本。
+- 使用 Visual Studio 2026 MSVC 14.5x、C++20 语言标准、CMake 4.4 或更高版本，以及 Windows SDK 10.0.19041 或更高版本。
 - Windows 专用 API 必须封装在职责明确的模块中；本里程碑不实现捕获功能。
 - 日志不得记录截图、窗口内容、剪贴板内容或标注文本。
 - 删除 Git 已跟踪的 Python 产物前，必须通过带注释的 Git 标签 `python-prototype-final` 保存 Python 原型。
@@ -38,7 +38,7 @@ LandscapeCutter/
 ├─ cmake/
 │  └─ Warnings.cmake                      # 只作用于本项目的 MSVC 警告策略
 ├─ scripts/
-│  └─ bootstrap.ps1                       # 固定并引导 vcpkg 2025.02.14
+│  └─ bootstrap.ps1                       # 固定并引导 vcpkg 2026.07.29
 ├─ src/
 │  ├─ CMakeLists.txt                      # 应用目标
 │  ├─ main.cpp                            # QApplication 入口
@@ -139,18 +139,18 @@ git commit -m "docs: preserve Python prototype recovery path"
 ### Task 2：建立可复现的构建工具链
 
 **文件：**
-- 新建：`CMakeLists.txt`
-- 新建：`CMakePresets.json`
-- 新建：`vcpkg.json`
-- 新建：`.clang-format`
-- 新建：`cmake/Warnings.cmake`
-- 新建：`scripts/bootstrap.ps1`
-- 新建：`src/CMakeLists.txt`
-- 新建：`tests/CMakeLists.txt`
-- 修改：`.gitignore`
+- 修改：`CMakeLists.txt`
+- 修改：`CMakePresets.json`
+- 修改：`vcpkg.json`
+- 修改：`scripts/bootstrap.ps1`
+- 验证：`.gitignore`
+- 验证：`.clang-format`
+- 验证：`cmake/Warnings.cmake`
+- 验证：`src/CMakeLists.txt`
+- 验证：`tests/CMakeLists.txt`
 
 **接口：**
-- 输入：位于 `D:\IDE\VisualStudio\Community` 的 Visual Studio 2022，以及位于 `C:\Program Files\CMake\bin\cmake.exe` 的 CMake。
+- 输入：位于 `D:\IDE\VisualStudio\Community` 的 Visual Studio 2026，以及位于 `C:\Program Files\CMake\bin\cmake.exe` 的 CMake 4.4.3。
 - 输出：`windows-msvc-debug` 配置、构建和测试预设，以及仓库本地的 `.tools/vcpkg` 依赖环境。
 
 - [x] **步骤 1：在 `.gitignore` 中补充 C++ 构建产物**
@@ -179,9 +179,9 @@ vcpkg_installed/
 *.tlog
 ```
 
-- [x] **步骤 2：定义清单依赖**
+- [ ] **步骤 2：定义清单依赖**
 
-创建 `vcpkg.json`：
+将 `vcpkg.json` 替换为：
 
 ```json
 {
@@ -189,6 +189,7 @@ vcpkg_installed/
   "version-string": "0.1.0-dev",
   "description": "GPU-accelerated Windows snipping, pinning, and live-region monitoring tool",
   "supports": "windows & x64",
+  "builtin-baseline": "c76c06644034521fb761a39f8f52d8e87d1103d5",
   "dependencies": [
     "catch2",
     {
@@ -203,15 +204,23 @@ vcpkg_installed/
     },
     "spdlog",
     "wil"
+  ],
+  "overrides": [
+    {
+      "name": "qtbase",
+      "version": "6.8.2",
+      "port-version": 2
+    }
   ]
 }
 ```
 
-通过固定 vcpkg 检出标签而不是使用未固定的滚动安装，将 `qtbase` 版本锁定为 6.8.2。
+`builtin-baseline` 必须对应 vcpkg 标签 `2026.07.29`。该 baseline 默认提供 Qt 6.11，
+因此必须保留 `qtbase 6.8.2#2` override；不得依赖默认版本或未固定的滚动安装。
 
-- [x] **步骤 3：添加 vcpkg 引导脚本**
+- [ ] **步骤 3：更新 vcpkg 引导脚本**
 
-创建 `scripts/bootstrap.ps1`：
+将 `scripts/bootstrap.ps1` 替换为：
 
 ```powershell
 [CmdletBinding()]
@@ -222,7 +231,7 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
-$vcpkgTag = "2025.02.14"
+$vcpkgTag = "2026.07.29"
 $repositoryRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot ".."))
 if ([string]::IsNullOrWhiteSpace($VcpkgRoot)) {
     $VcpkgRoot = Join-Path $repositoryRoot ".tools\vcpkg"
@@ -254,27 +263,28 @@ if ($LASTEXITCODE -ne 0) {
 }
 ```
 
-- [x] **步骤 4：定义 CMake 预设**
+- [ ] **步骤 4：更新 CMake 预设**
 
-创建 `CMakePresets.json`：
+将 `CMakePresets.json` 替换为：
 
 ```json
 {
   "version": 6,
   "cmakeMinimumRequired": {
-    "major": 3,
-    "minor": 28,
+    "major": 4,
+    "minor": 4,
     "patch": 0
   },
   "configurePresets": [
     {
       "name": "windows-msvc-debug",
       "displayName": "Windows x64 MSVC Debug",
-      "generator": "Visual Studio 17 2022",
+      "generator": "Visual Studio 18 2026",
       "architecture": "x64",
       "binaryDir": "${sourceDir}/out/build/windows-msvc-debug",
       "cacheVariables": {
         "BUILD_TESTING": "ON",
+        "LC_MIN_WINDOWS_SDK_VERSION": "10.0.19041.0",
         "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/.tools/vcpkg/scripts/buildsystems/vcpkg.cmake",
         "VCPKG_TARGET_TRIPLET": "x64-windows"
       }
@@ -329,12 +339,12 @@ SortIncludes: CaseSensitive
 AllowShortFunctionsOnASingleLine: Empty
 ```
 
-- [x] **步骤 6：定义根构建约定**
+- [ ] **步骤 6：更新根构建约定**
 
-创建 `CMakeLists.txt`：
+将 `CMakeLists.txt` 替换为：
 
 ```cmake
-cmake_minimum_required(VERSION 3.28)
+cmake_minimum_required(VERSION 4.4)
 
 project(LandscapeCutter VERSION 0.1.0 LANGUAGES CXX RC)
 
@@ -346,6 +356,25 @@ if(NOT CMAKE_SIZEOF_VOID_P EQUAL 8)
     message(FATAL_ERROR "LandscapeCutter currently supports x64 builds only.")
 endif()
 
+set(LC_MIN_WINDOWS_SDK_VERSION "10.0.19041.0" CACHE STRING
+    "Minimum supported Windows SDK version")
+if(MSVC)
+    if(NOT DEFINED CMAKE_VS_WINDOWS_TARGET_PLATFORM_VERSION
+       OR CMAKE_VS_WINDOWS_TARGET_PLATFORM_VERSION STREQUAL "")
+        message(FATAL_ERROR
+            "Could not determine the selected Windows SDK version. Install Windows SDK "
+            "${LC_MIN_WINDOWS_SDK_VERSION} or newer.")
+    endif()
+
+    if(CMAKE_VS_WINDOWS_TARGET_PLATFORM_VERSION VERSION_LESS LC_MIN_WINDOWS_SDK_VERSION)
+        message(FATAL_ERROR
+            "LandscapeCutter requires Windows SDK ${LC_MIN_WINDOWS_SDK_VERSION} or newer; "
+            "selected ${CMAKE_VS_WINDOWS_TARGET_PLATFORM_VERSION}.")
+    endif()
+
+    message(STATUS "Using Windows SDK ${CMAKE_VS_WINDOWS_TARGET_PLATFORM_VERSION}")
+endif()
+
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
@@ -353,10 +382,7 @@ set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
 
-find_package(Qt6 6.8 REQUIRED COMPONENTS Core Gui Widgets)
-if(Qt6_VERSION VERSION_GREATER_EQUAL "6.9.0")
-    message(FATAL_ERROR "Milestone 0 is pinned to the Qt 6.8 series.")
-endif()
+find_package(Qt6 6.8.2 EXACT REQUIRED COMPONENTS Core Gui Widgets)
 message(STATUS "Using Qt ${Qt6_VERSION}")
 
 find_package(spdlog CONFIG REQUIRED)
@@ -384,7 +410,33 @@ endif()
 # Test targets are introduced with their corresponding production interfaces.
 ```
 
-- [ ] **步骤 7：引导并安装依赖**
+- [ ] **步骤 7：安全移除不兼容的旧 vcpkg 检出**
+
+在仓库根目录运行以下 PowerShell。只允许删除仓库 `.tools` 下已经确认不是
+`2026.07.29` 的 vcpkg 生成目录：
+
+```powershell
+$repositoryPath = (Resolve-Path -LiteralPath .).Path
+$toolsPath = [System.IO.Path]::GetFullPath((Join-Path $repositoryPath ".tools"))
+$vcpkgPath = [System.IO.Path]::GetFullPath((Join-Path $toolsPath "vcpkg"))
+$expectedPrefix = $toolsPath + [System.IO.Path]::DirectorySeparatorChar
+
+if (-not $vcpkgPath.StartsWith($expectedPrefix, [System.StringComparison]::OrdinalIgnoreCase)) {
+    throw "Refusing to remove unexpected vcpkg directory: $vcpkgPath"
+}
+
+if (Test-Path -LiteralPath $vcpkgPath) {
+    $actualTag = git -C $vcpkgPath describe --tags --exact-match
+    if ($LASTEXITCODE -ne 0 -or $actualTag.Trim() -ne "2026.07.29") {
+        Remove-Item -LiteralPath $vcpkgPath -Recurse -Force
+    }
+}
+```
+
+预期：旧 `2025.02.14` 检出被删除，仓库源文件和 `.tools` 之外的路径不受影响。
+如果目录已经是 `2026.07.29`，则保留并复用。
+
+- [ ] **步骤 8：引导并安装依赖**
 
 在仓库根目录运行：
 
@@ -392,9 +444,11 @@ endif()
 powershell -ExecutionPolicy Bypass -File .\scripts\bootstrap.ps1
 ```
 
-预期：`.tools/vcpkg/vcpkg.exe` 存在；vcpkg 报告 `qtbase:x64-windows` 版本为 6.8.2，并完成清单中的四项依赖。该命令会下载并构建依赖，因此执行时需要网络访问授权。
+预期：`.tools/vcpkg/vcpkg.exe` 存在；vcpkg 精确检出标签 `2026.07.29`，识别
+Visual Studio 18，并报告 `qtbase:x64-windows` 版本为 `6.8.2#2`；清单中的四项
+直接依赖及其传递依赖全部安装完成。该命令会下载并构建依赖，因此执行时需要网络访问授权。
 
-- [ ] **步骤 8：配置并构建空工程**
+- [ ] **步骤 9：配置并构建空工程**
 
 运行：
 
@@ -405,16 +459,17 @@ cmake --build --preset windows-msvc-debug
 
 预期：配置阶段报告使用 Qt 6.8.2；构建成功退出，且此时尚不编译应用目标。
 
-- [x] **步骤 9：提交构建基础**
+- [ ] **步骤 10：提交 VS 2026 工具链修订**
 
 运行：
 
 ```powershell
 git add .gitignore .clang-format CMakeLists.txt CMakePresets.json vcpkg.json cmake scripts src/CMakeLists.txt tests/CMakeLists.txt
-git commit -m "build: establish C++20 Qt toolchain"
+git commit -m "build: adopt Visual Studio 2026 toolchain"
 ```
 
-预期：生成一个构建系统提交；`.tools` 和 `out` 仍未被跟踪且已被忽略。
+预期：生成一个只包含 VS 2026 工具链修订的构建系统提交；`.tools` 和 `out`
+仍未被跟踪且已被忽略。
 
 ---
 
@@ -939,9 +994,9 @@ LandscapeCutter is not affiliated with or endorsed by Snipaste.
 
 - Windows 10 1903 or later, including Windows 11
 - x64 processor and operating system
-- Visual Studio 2022 with the MSVC v143 C++ workload
+- Visual Studio 2026 with the MSVC 14.5x C++ workload
 - Windows SDK 10.0.19041 or newer
-- CMake 3.28 or newer
+- CMake 4.4 or newer
 - Git and PowerShell
 
 Qt 6.8.2, Catch2, spdlog, and WIL are installed through the pinned vcpkg
@@ -1097,7 +1152,7 @@ git diff --check
 
 - `python-prototype-final` 可以恢复完整 Python 原型。
 - 当前分支不包含 Python 运行实现、依赖文件、过期 JSON 运行配置、已跟踪 `.pyc` 或已跟踪 `.pyd`。
-- vcpkg 固定到标签 2025.02.14，并为 `x64-windows` 动态解析 Qt 6.8.2。
+- vcpkg 固定到标签 2026.07.29，并通过 baseline 与 override 为 `x64-windows` 动态解析 `qtbase 6.8.2#2`。
 - 在干净构建目录中，`cmake --preset windows-msvc-debug`、构建和 CTest 全部通过。
 - `LandscapeCutter.exe` 以系统托盘应用启动，并能通过托盘菜单退出。
 - README、旧版说明和历史伪最小化说明与已批准的 C++ 设计一致。
