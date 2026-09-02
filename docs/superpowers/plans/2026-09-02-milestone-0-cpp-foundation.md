@@ -61,7 +61,7 @@ LandscapeCutter/
 
 ---
 
-### 任务 1：保留 Python 原型
+### Task 1：保留 Python 原型
 
 **文件：**
 - 新建：`legacy/README.md`
@@ -136,7 +136,7 @@ git commit -m "docs: preserve Python prototype recovery path"
 
 ---
 
-### 任务 2：建立可复现的构建工具链
+### Task 2：建立可复现的构建工具链
 
 **文件：**
 - 新建：`CMakeLists.txt`
@@ -415,7 +415,7 @@ git commit -m "build: establish C++20 Qt toolchain"
 
 ---
 
-### 任务 3：以测试驱动方式建立应用接口约定
+### Task 3：以测试驱动方式建立应用接口约定
 
 **文件：**
 - 新建：`src/app/AppMetadata.hpp`
@@ -611,7 +611,7 @@ git commit -m "test: define application launch contracts"
 
 ---
 
-### 任务 4：构建 Qt 托盘应用空壳
+### Task 4：构建 Qt 托盘应用空壳
 
 **文件：**
 - 新建：`src/app/AppController.hpp`
@@ -865,7 +865,7 @@ git commit -m "feat: add Qt tray application shell"
 
 ---
 
-### 任务 5：移除当前 Python 运行实现并重写项目文档
+### Task 5：移除当前 Python 运行实现并重写项目文档
 
 **文件：**
 - 删除：`python/Release/landscapecutter_core.cp310-win_amd64.pyd`
@@ -1021,7 +1021,7 @@ git commit -m "refactor: retire Python runtime from main"
 
 ---
 
-### 任务 6：从干净构建目录验证里程碑 0
+### Task 6：从干净构建目录验证里程碑 0
 
 **文件：**
 - 验证：任务 1 至任务 5 中创建或修改的全部文件。
