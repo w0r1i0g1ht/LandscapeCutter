@@ -1,168 +1,64 @@
-# LandscapeCutter 使用说明
+# LandscapeCutter
 
-## 简介
+LandscapeCutter is an open-source Windows snipping, pinning, and live-region
+monitoring tool. It is inspired by the efficient workflow of Snipaste while
+remaining an independent project with its own implementation and brand.
 
-LandscapeCutter 是一个轻量级的桌面截图工具，类似于 Snipaste，允许用户通过快捷键快速截取屏幕区域并以悬浮窗形式实时显示。
+## Status
 
-## 功能特点
+The project is being rewritten in C++20 and Qt 6.8. Milestone 0 provides the
+build system, tests, and tray application shell. Static capture, annotation,
+static pins, and live window-relative pins are delivered in subsequent
+milestones.
 
-- **Alt+X 快捷键截图**：按 Alt+X 键快速启动屏幕区域选择
-- **实时显示**：截取的区域以悬浮窗形式实时显示
-- **拖动悬浮窗**：可以拖动悬浮窗到任意位置
-- **双击关闭**：双击悬浮窗即可关闭
-- **系统托盘**：程序运行时在系统托盘显示图标
-- **高性能**：60 FPS 刷新率，画面延迟约 16ms
-- **DPI 自适应**：自动适配高 DPI 显示器
-- **多显示器支持**：支持多显示器环境
+LandscapeCutter is not affiliated with or endorsed by Snipaste.
 
-## 使用方法
+## Requirements
 
-### 1. 启动程序
+- Windows 10 1903 or later, including Windows 11
+- x64 processor and operating system
+- Visual Studio 2026 with the MSVC 14.5x C++ workload
+- Windows SDK 10.0.19041 or newer
+- CMake 4.4 or newer
+- Git and PowerShell
 
-```bash
-cd python
-python main.py
+Qt 6.8.2, Catch2, spdlog, and WIL are installed through the pinned vcpkg
+bootstrap script.
+
+## Configure and build
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\bootstrap.ps1
+cmake --preset windows-msvc-debug
+cmake --build --preset windows-msvc-debug
 ```
 
-### 2. 截图操作
+## Test
 
-1. 程序启动后，会在系统托盘显示图标
-2. 按 **Alt+X** 键启动屏幕选择器
-3. 使用鼠标拖动选择要截取的矩形区域
-4. 释放鼠标后，选择的区域会以悬浮窗形式显示
-
-**备选方式**：
-- 单击或双击系统托盘图标启动截图
-- 右键点击系统托盘图标，选择"截图 (Alt+X)"
-
-### 3. 悬浮窗操作
-
-- **拖动**：按住鼠标左键拖动悬浮窗
-- **关闭**：双击悬浮窗即可关闭
-- **重新截图**：再次按 Alt+X 键会关闭当前悬浮窗并启动新的截图
-
-### 4. 退出程序
-
-右键点击系统托盘图标，选择"退出"即可关闭程序。
-
-## 技术架构
-
-### 核心模块
-
-1. **main.py**：主程序入口
-   - 系统托盘管理
-   - Alt+X 全局热键注册（Windows API）
-   - 悬浮窗生命周期管理
-
-2. **screen_selector.py**：屏幕选择器
-   - 全屏半透明覆盖层
-   - 鼠标拖动选择区域
-   - 实时显示选择区域尺寸和坐标
-   - DPI 缩放处理
-   - 多显示器支持
-
-3. **floating_window.py**：悬浮窗组件
-   - 实时画面显示
-   - 鼠标拖动支持
-   - 双击关闭功能
-   - 60 FPS 刷新率
-   - 图像缩放适配
-
-4. **capture_mss.py**：屏幕捕获模块
-   - 使用 MSS 库进行高效屏幕捕获
-   - 支持 RGB 格式输出
-   - 错误处理和异常恢复
-
-### 技术栈
-
-- **UI 框架**：PySide6 (Qt6)
-- **屏幕捕获**：MSS (Multi-Screen Shot)
-- **图像处理**：NumPy, OpenCV
-- **全局热键**：Windows API (RegisterHotKey)
-- **窗口管理**：Windows API (win32gui, win32api)
-
-## 性能优化
-
-- **刷新率**：60 FPS（16ms 间隔）
-- **延迟**：约 16-30ms
-- **内存占用**：约 50-100MB
-- **CPU 占用**：约 5-10%
-- **响应时间**：快捷键响应 < 100ms
-
-## 系统要求
-
-- **操作系统**：Windows 10/11
-- **Python**：3.9+
-- **依赖包**：
-  - PySide6 >= 6.4.0
-  - mss >= 7.0.0
-  - opencv-python >= 4.5.0
-  - pywin32 >= 303.0.0
-  - numpy
-
-## 安装方法
-
-### 1. 安装依赖
-
-```bash
-pip install -r requirements.txt
+```powershell
+ctest --preset windows-msvc-debug
 ```
 
-### 2. 运行程序
+## Run
 
-```bash
-cd python
-python main.py
+```powershell
+& .\out\build\windows-msvc-debug\src\Debug\LandscapeCutter.exe
 ```
 
-## 故障排除
+The foundation build starts as a system-tray application. Select `退出` from
+the tray menu to close it.
 
-### 快捷键不响应
+## Design and roadmap
 
-- 确保程序正在运行
-- 检查是否有其他程序占用了 Alt+X 热键
-- 尝试重启程序
-- 检查控制台输出是否有"全局 Alt+X 热键注册成功"提示
+The approved C++ product and architecture design is in
+[`docs/superpowers/specs/2026-09-02-cpp-rewrite-design.md`](docs/superpowers/specs/2026-09-02-cpp-rewrite-design.md).
 
-### 截图区域定位偏差
+The original Python prototype is preserved by the annotated Git tag
+`python-prototype-final`. See [`legacy/README.md`](legacy/README.md) for safe
+inspection instructions.
 
-- 程序已自动处理 DPI 缩放，无需手动设置
-- 确保 Windows 显示缩放设置正常
-- 在多显示器环境下，确保显示器排列设置正确
+## License
 
-### 悬浮窗不更新
-
-- 检查截取的区域是否仍然可见
-- 尝试重新截图
-- 检查系统资源占用
-
-### 程序无法启动
-
-- 检查 Python 版本是否为 3.9+
-- 确保所有依赖包已正确安装
-- 检查 assets/LandscapeCutter.ico 图标文件是否存在
-
-## 注意事项
-
-1. **全局热键**：Alt+X 是全局热键，在系统任何地方都有效
-2. **悬浮窗置顶**：悬浮窗始终置顶显示
-3. **单实例**：同一时间只能显示一个悬浮窗，新的截图会关闭旧的悬浮窗
-4. **DPI 缩放**：程序自动处理 Windows DPI 缩放，无需手动调整
-
-## 更新日志
-
-### v1.0.0
-- 初始版本发布
-- 实现 Alt+X 全局热键截图
-- 实现悬浮窗实时显示
-- 支持 DPI 自适应和多显示器
-
-## 许可证
-
-MIT License
-
-## 联系方式
-
-如有问题或建议，请通过以下方式联系：
-- GitHub Issues
-- Email
+The repository retains its existing license status until a dedicated license
+file is added as part of release preparation. Do not redistribute binaries as
+an official release before that decision is recorded.
