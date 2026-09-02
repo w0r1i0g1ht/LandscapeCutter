@@ -7,7 +7,7 @@
 - 执行分支：`codex/cpp-foundation`
 - 隔离工作树：`D:\Projects\LandscapeCutter\.worktrees\cpp-foundation`
 - 执行方式：每个任务由独立子代理实施，随后进行规格符合性与代码质量审查
-- 当前状态：Task 6 阻塞，等待稳定的 Windows 系统托盘交互验收
+- 当前状态：已按用户要求暂停；Task 4 重新进入诊断，Task 6 继续等待真实托盘交互验收
 - 完成度：5 / 6
 
 ## 任务状态
@@ -17,9 +17,9 @@
 | 任务 1：保留 Python 原型 | 已完成 | `bdb76c8` | 规格符合、质量通过 |
 | 任务 2：建立可复现的构建工具链 | 已完成 | `c04fcb4`、`222ddd5`、`6c8555d`、`8ef5741` | 规格符合、质量通过（2 轮修复） |
 | 任务 3：以测试驱动方式建立应用接口约定 | 已完成 | `e1c79e7`、`c3a5494` | 规格符合、质量通过（1 轮修复） |
-| 任务 4：构建 Qt 托盘应用空壳 | 已完成（交互验收待具备托盘的桌面） | `122fe99` | 规格符合、质量通过 |
+| 任务 4：构建 Qt 托盘应用空壳 | 已重新打开并暂停（托盘启动诊断中） | `122fe99` | 原审查通过；新增问题尚未完成修复与复审 |
 | 任务 5：移除当前 Python 运行实现并重写项目文档 | 已完成 | `fb0fc71` | 规格符合、质量通过 |
-| 任务 6：从干净构建目录验证里程碑 0 | 阻塞（待交互验收） | 无代码提交 | 构建与自动化通过；退出条件未全部满足 |
+| 任务 6：从干净构建目录验证里程碑 0 | 已暂停（待 Task 4 诊断及交互验收） | 无代码提交 | 构建与自动化通过；退出条件未全部满足 |
 
 ## 执行记录
 
@@ -51,10 +51,14 @@
 - 2026-09-02：控制器再次独立执行同样的干净构建流程，CMake 使用 VS 2026、MSVC 19.51、Windows SDK 10.0.28000 和 Qt 6.8.2；CTest 5/5，进程冒烟测试通过，Qt 动态 DLL 与 `platforms/qwindowsd.dll` 均存在。
 - 2026-09-02：Task 6 初审发现交互托盘验收缺失（Critical）及验证报告证据不完整；第 1 轮报告修复已补齐 annotated tag、vcpkg exact tag、Python/JSON 清理、文档一致性、Qt 动态部署和最终 Git 状态证据。
 - 2026-09-02：Task 6 范围复审确认 2 个 Important 与 3 个 Minor 报告问题已解决，唯一未闭合项是托盘图标、通知、“退出”菜单和无残留图标的真实交互验收；因此 Task 6 与里程碑 0 暂不宣布完成。
+- 2026-09-02：用户恢复任务栏后进行第 2 次交互验收尝试；由 Codex UI 自动化助手启动的进程仍显示“系统托盘不可用”，说明自动化启动上下文无法访问用户桌面的通知区域。已停止自动化重试，最后一步改由用户从文件资源管理器直接启动程序验证。
+- 2026-09-02：重新打开 Task 4 后确认 Codex 命令进程位于 `WinSta0\\CodexSandboxDesktop-*`，该桌面不存在 `Shell_TrayWnd`；同时只读枚举确认 `WinSta0\\Default` 存在可见的 `Shell_TrayWnd` 和 `SystemTray_Main`。因此自动化启动失败属于桌面隔离证据，不能代替真实桌面验收。
+- 2026-09-02：用户后续截图中的 Qt 平台插件报错来自 `out\\build\\windows-msvc-debug\\tests\\Debug` 测试程序，而不是 `src\\Debug\\LandscapeCutter.exe`；该次操作不能用于判断正式程序的托盘行为。正确验收目标已明确为 `out\\build\\windows-msvc-debug\\src\\Debug\\LandscapeCutter.exe`。
+- 2026-09-02：Task 4 实施代理已起草托盘初始不可用场景的回归测试及测试目标配置，尚未完成 RED 验证、生产代码修复、构建或复审。用户要求保存进度并暂停，代理已中止；当前 WIP 将以暂停快照提交。
 
 ## 当前阻塞
 
-- Task 4/Task 6 的真实托盘交互验收需要稳定存在的 Windows 通知区域；当前执行桌面的 `Shell_TrayWnd` 会消失或短暂出现，无法可靠选择托盘菜单。代码、干净构建和自动化测试已通过，但该硬退出条件阻塞 Task 6 与里程碑 0 完成。
+- Task 4 当前停在诊断/TDD 的 RED 准备阶段；需要恢复后先验证新增测试按预期失败，再确认 Qt 对“启动时托盘暂不可用”的约定并实施最小修复。Task 6 随后仍需从 `src\\Debug\\LandscapeCutter.exe` 在 `WinSta0\\Default` 上完成图标、通知、菜单退出和无残留图标验收。
 
 ## 验证汇总
 
@@ -83,3 +87,5 @@
 - Task 6：两次独立的受控清理与全新构建均成功；最终控制器验证从缓存恢复 18 个依赖，解析 `qtbase 6.8.2#2`，VS 2026 全量构建成功，CTest 5/5。
 - Task 6：输出目录包含 `Qt6Cored.dll`、`Qt6Guid.dll`、`Qt6Widgetsd.dll` 和 `platforms/qwindowsd.dll`；`python-prototype-final` 为 annotated tag，当前分支无 Python 运行实现。
 - Task 6：报告第 1 轮范围复审解决 2 个 Important 和 3 个 Minor，仍保留 1 个 Critical 环境验收缺口；Task 6 未完成。
+- Task 6：第 2 次自动化交互尝试仍进入“系统托盘不可用”保护，未反复重试；需要用户从文件资源管理器直接启动 `LandscapeCutter.exe` 后完成菜单退出验收。
+- 暂停快照：未完成修改为 `tests/app/AppControllerTests.cpp` 与 `tests/CMakeLists.txt`，目标是覆盖“系统托盘初始不可用时控制器仍可启动”；尚无 RED/GREEN 结论，不应视为已修复。
