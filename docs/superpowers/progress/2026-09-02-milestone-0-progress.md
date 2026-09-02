@@ -7,7 +7,7 @@
 - 执行分支：`codex/cpp-foundation`
 - 隔离工作树：`D:\Projects\LandscapeCutter\.worktrees\cpp-foundation`
 - 执行方式：每个任务由独立子代理实施，随后进行规格符合性与代码质量审查
-- 当前状态：Task 6 执行准备中
+- 当前状态：Task 6 阻塞，等待稳定的 Windows 系统托盘交互验收
 - 完成度：5 / 6
 
 ## 任务状态
@@ -19,7 +19,7 @@
 | 任务 3：以测试驱动方式建立应用接口约定 | 已完成 | `e1c79e7`、`c3a5494` | 规格符合、质量通过（1 轮修复） |
 | 任务 4：构建 Qt 托盘应用空壳 | 已完成（交互验收待具备托盘的桌面） | `122fe99` | 规格符合、质量通过 |
 | 任务 5：移除当前 Python 运行实现并重写项目文档 | 已完成 | `fb0fc71` | 规格符合、质量通过 |
-| 任务 6：从干净构建目录验证里程碑 0 | 未开始 | — | — |
+| 任务 6：从干净构建目录验证里程碑 0 | 阻塞（待交互验收） | 无代码提交 | 构建与自动化通过；退出条件未全部满足 |
 
 ## 执行记录
 
@@ -47,10 +47,14 @@
 - 2026-09-02：普通模式在当前桌面正确进入“系统托盘不可用”保护；Win32 只读探测确认该桌面不存在 `Shell_TrayWnd`、`Shell_SecondaryTrayWnd` 和 `NotifyIconOverflowWindow`，真实托盘图标、通知和“退出”菜单验收顺延到 Task 6 或具备通知区域的桌面。
 - 2026-09-02：Task 5 提交 `fb0fc71`；再次确认带注释标签可恢复完整 Python 原型后，按计划精确删除 15 个 Python 运行与旧设计路径，并更新公开 README 和历史伪最小化说明。
 - 2026-09-02：Task 5 控制器独立验证当前分支无已跟踪 Python 运行路径、C++ 构建成功、CTest 5/5；独立审查确认 15 个删除和 2 个文档修改均精确符合规格，无 Critical、Important 或 Minor 问题。
+- 2026-09-02：Task 6 仅删除经过绝对路径、父目录包含关系和精确相等校验的 `out/build/windows-msvc-debug`，随后从本机缓存恢复 18 个依赖并完成全新配置与构建；`.tools/vcpkg` 和源文件未受影响。
+- 2026-09-02：控制器再次独立执行同样的干净构建流程，CMake 使用 VS 2026、MSVC 19.51、Windows SDK 10.0.28000 和 Qt 6.8.2；CTest 5/5，进程冒烟测试通过，Qt 动态 DLL 与 `platforms/qwindowsd.dll` 均存在。
+- 2026-09-02：Task 6 初审发现交互托盘验收缺失（Critical）及验证报告证据不完整；第 1 轮报告修复已补齐 annotated tag、vcpkg exact tag、Python/JSON 清理、文档一致性、Qt 动态部署和最终 Git 状态证据。
+- 2026-09-02：Task 6 范围复审确认 2 个 Important 与 3 个 Minor 报告问题已解决，唯一未闭合项是托盘图标、通知、“退出”菜单和无残留图标的真实交互验收；因此 Task 6 与里程碑 0 暂不宣布完成。
 
 ## 当前阻塞
 
-- Task 4/Task 6 的真实托盘交互验收需要具备 Windows 通知区域的桌面；当前执行桌面没有系统托盘窗口。该环境限制不阻塞 Task 5 的仓库迁移工作。
+- Task 4/Task 6 的真实托盘交互验收需要稳定存在的 Windows 通知区域；当前执行桌面的 `Shell_TrayWnd` 会消失或短暂出现，无法可靠选择托盘菜单。代码、干净构建和自动化测试已通过，但该硬退出条件阻塞 Task 6 与里程碑 0 完成。
 
 ## 验证汇总
 
@@ -76,3 +80,6 @@
 - Task 5：`python-prototype-final` 仍为 annotated tag，目标为 `74a1184dc41069cd5791b37a18f00242c91ed78d`，并包含全部待删除 Python 运行路径。
 - Task 5：当前分支 `git ls-files -- python requirements.txt config.json` 无输出；构建成功，CTest 5/5 通过。
 - Task 5：独立审查确认变更精确包含 15 个计划删除路径和 2 个文档修改路径，无额外删除或遗漏。
+- Task 6：两次独立的受控清理与全新构建均成功；最终控制器验证从缓存恢复 18 个依赖，解析 `qtbase 6.8.2#2`，VS 2026 全量构建成功，CTest 5/5。
+- Task 6：输出目录包含 `Qt6Cored.dll`、`Qt6Guid.dll`、`Qt6Widgetsd.dll` 和 `platforms/qwindowsd.dll`；`python-prototype-final` 为 annotated tag，当前分支无 Python 运行实现。
+- Task 6：报告第 1 轮范围复审解决 2 个 Important 和 3 个 Minor，仍保留 1 个 Critical 环境验收缺口；Task 6 未完成。
