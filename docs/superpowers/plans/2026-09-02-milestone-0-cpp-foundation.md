@@ -643,10 +643,10 @@ lc_enable_warnings(landscapecutter_app_core)
 
 ```powershell
 cmake --build --preset windows-msvc-debug
-ctest --preset windows-msvc-debug -R "application metadata|launch" 
+ctest --preset windows-msvc-debug -R "^(application metadata is stable|normal launch is the default|smoke-test flag selects smoke mode|unrelated arguments do not select smoke mode)$"
 ```
 
-预期：三个 Catch2 测试用例全部通过。
+预期：四个 Catch2 测试用例全部通过。
 
 - [ ] **步骤 5：格式化代码并重新运行全部测试**
 
