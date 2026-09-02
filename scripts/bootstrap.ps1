@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [string]$VcpkgRoot = (Join-Path $PSScriptRoot "..\.tools\vcpkg")
+    [string]$VcpkgRoot
 )
 
 Set-StrictMode -Version Latest
@@ -8,6 +8,9 @@ $ErrorActionPreference = "Stop"
 
 $vcpkgTag = "2025.02.14"
 $repositoryRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot ".."))
+if ([string]::IsNullOrWhiteSpace($VcpkgRoot)) {
+    $VcpkgRoot = Join-Path $repositoryRoot ".tools\vcpkg"
+}
 $resolvedRoot = [System.IO.Path]::GetFullPath($VcpkgRoot)
 $gitDirectory = Join-Path $resolvedRoot ".git"
 $bootstrap = Join-Path $resolvedRoot "bootstrap-vcpkg.bat"

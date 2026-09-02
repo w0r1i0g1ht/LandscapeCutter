@@ -14,6 +14,7 @@
       "binaryDir": "${sourceDir}/out/build/windows-msvc-debug",
       "cacheVariables": {
         "BUILD_TESTING": "ON",
+        "LC_MIN_WINDOWS_SDK_VERSION": "10.0.19041.0",
         "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/.tools/vcpkg/scripts/buildsystems/vcpkg.cmake",
         "VCPKG_TARGET_TRIPLET": "x64-windows"
       }

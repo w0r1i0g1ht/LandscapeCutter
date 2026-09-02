@@ -10,6 +10,25 @@ if(NOT CMAKE_SIZEOF_VOID_P EQUAL 8)
     message(FATAL_ERROR "LandscapeCutter currently supports x64 builds only.")
 endif()
 
+set(LC_MIN_WINDOWS_SDK_VERSION "10.0.19041.0" CACHE STRING
+    "Minimum supported Windows SDK version")
+if(MSVC)
+    if(NOT DEFINED CMAKE_VS_WINDOWS_TARGET_PLATFORM_VERSION
+       OR CMAKE_VS_WINDOWS_TARGET_PLATFORM_VERSION STREQUAL "")
+        message(FATAL_ERROR
+            "Could not determine the selected Windows SDK version. Install Windows SDK "
+            "${LC_MIN_WINDOWS_SDK_VERSION} or newer.")
+    endif()
+
+    if(CMAKE_VS_WINDOWS_TARGET_PLATFORM_VERSION VERSION_LESS LC_MIN_WINDOWS_SDK_VERSION)
+        message(FATAL_ERROR
+            "LandscapeCutter requires Windows SDK ${LC_MIN_WINDOWS_SDK_VERSION} or newer; "
+            "selected ${CMAKE_VS_WINDOWS_TARGET_PLATFORM_VERSION}.")
+    endif()
+
+    message(STATUS "Using Windows SDK ${CMAKE_VS_WINDOWS_TARGET_PLATFORM_VERSION}")
+endif()
+
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
