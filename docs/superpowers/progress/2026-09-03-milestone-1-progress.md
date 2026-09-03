@@ -4,7 +4,7 @@
 - 规格：[里程碑 1：Windows 图形基础详细设计](../specs/2026-09-03-milestone-1-windows-graphics-foundation-design.md)
 - 执行分支：`codex/milestone-1-windows-graphics-foundation`
 - 工作树：`D:\Projects\LandscapeCutter\.worktrees\milestone-1-windows-graphics-foundation`
-- 当前任务：Task 3 已完成实现与自动验证，任务审查待控制器执行；里程碑 1 尚未完成。
+- 当前任务：Task 4 已完成实现与自动验证，任务审查待控制器执行；里程碑 1 尚未完成。
 
 ## 任务状态
 
@@ -12,8 +12,8 @@
 |---|---|---|---|
 | Task 1：建立平台中立的显示器基础类型 | 已完成 | `e80ee84` | 首次审查：Needs fixes；fix round 1 已通过复审 |
 | Task 2：固定 Per-Monitor V2 DPI 启动边界 | 已完成 | `65d1113` | 首次审查：Needs fixes；fix round 1 最终复审：Clean |
-| Task 3：建立原生消息窗口与全局快捷键服务 | 已实现；任务审查待控制器执行 | `ed04ed9` | 自动验证完成；不预写审查通过 |
-| Task 4：实现 Windows 显示器目录适配器 | 未开始 | — | — |
+| Task 3：建立原生消息窗口与全局快捷键服务 | 已完成 | `ed04ed9` | 独立审查（`0490086`）：Clean |
+| Task 4：实现可通知现有进程的单实例协议 | 已实现；任务审查待控制器执行 | `7816279` | 自动验证完成；不预写审查通过 |
 | Task 5：实现 Windows Graphics Capture 捕获适配器 | 未开始 | — | — |
 | Task 6：实现捕获协调器 | 未开始 | — | — |
 | Task 7：接入托盘捕获命令 | 未开始 | — | — |
@@ -183,8 +183,54 @@ pwsh.exe -NoProfile -File .superpowers/sdd/2026-09-03-milestone-1-windows-graphi
 - 自审：仅改动 Task 3 列出的平台窗口/热键、测试、CMake 与进度文档；未改动 Task 1
   `MonitorTypes` 或 Task 2 DPI/manifest/main 启动边界，未新增第三方依赖。生产窗口没有可见样式
   或显示调用；测试仅使用 `VK_F24`。
-- 实现提交：`ed04ed9`（`feat: add native messages and global hotkeys`）。任务审查待控制器执行；
-  尚无审查通过结论。
+- 实现提交：`ed04ed9`（`feat: add native messages and global hotkeys`）。独立审查记录提交
+  `0490086`，结论为 Clean。
 - 未闭合验收：产品 `{0x4C43, MOD_NOREPEAT, VK_F1}` 尚未在 Task 9 composition root 注册；
   尚未完成真实桌面捕获、多显示器/混合 DPI、托盘与退出流程的集成/人工验收。上述项目均不因
   本任务的自动测试而视为通过。
+
+## Task 4 实施记录
+
+新增 `lc::platform::windows::SingleInstanceCoordinator`，对固定产品 GUID
+`4F4E6D0D-8C33-4B79-984A-3E44F6A62D11` 使用 `Local` 命名空间。`acquire()` 始终先创建自动
+复位的 `.Activate` event，再创建并持有 `.Instance` mutex；mutex 已存在时返回 `Secondary`，否则
+返回 `Primary`。测试后缀精确追加于 GUID 和两个对象后缀之间。次实例仅通过 `SetEvent` 通知；主
+实例在 `QCoreApplication` 已存在时用 `QWinEventNotifier` 发出 `activationRequested()`。event、
+mutex 都以 WIL `unique_handle` 管理，析构先关闭 notifier，再释放两个句柄。
+
+独立目标 `landscapecutter_single_instance_tests` 以 GUID 建立每个测试的唯一命名空间，覆盖首个
+协调器为 Primary、第二个为 Secondary；覆盖次实例在主实例建立 notifier 前 `SetEvent` 后仍恰好
+触发一次；并在所有旧对象析构后验证同名 replacement 再次成为 Primary。
+
+### RED
+
+先加入测试目标和三项契约测试后，按主机约束通过包装器执行：
+
+```powershell
+pwsh.exe -NoProfile -File .superpowers/sdd/2026-09-03-milestone-1-windows-graphics-foundation/Invoke-CleanBuildTool.ps1 cmake --build --preset windows-msvc-debug --target landscapecutter_single_instance_tests
+```
+
+提升环境中的实际结果在 `SingleInstanceCoordinatorTests.cpp(1,10)` 以 C1083 失败，明确缺少
+`platform/windows/SingleInstanceCoordinator.hpp`。受限环境的 FileTracker `E_ACCESSDENIED` 未记作
+RED；同一包装器在允许的提升环境中取得了上述特征失败。
+
+### GREEN 与回归
+
+```powershell
+pwsh.exe -NoProfile -File .superpowers/sdd/2026-09-03-milestone-1-windows-graphics-foundation/Invoke-CleanBuildTool.ps1 cmake --build --preset windows-msvc-debug --target landscapecutter_single_instance_tests
+pwsh.exe -NoProfile -File .superpowers/sdd/2026-09-03-milestone-1-windows-graphics-foundation/Invoke-CleanBuildTool.ps1 ctest --preset windows-msvc-debug -R "coordinator|secondary" --output-on-failure
+```
+
+结果：专用目标构建成功；定向 CTest `3/3` 通过。随后同一包装器的全量构建成功，完整 CTest
+`19/19` 通过（含 `bootstrap_identity_behavior` 与 `cmake_sdk_floor_behavior`）。
+
+## Task 4 自审与未闭合验收
+
+- `git diff --check`：功能提交前通过；实现提交为 `7816279`
+  （`feat: add single-instance activation protocol`）。
+- 自审：event 在 mutex 前创建；命名完全使用任务书的 GUID 与后缀顺序；自动复位 event 的“先
+  `SetEvent`、后监听”路径由真实内核对象和 Qt 事件循环验证；没有修改 `main()`、托盘、快捷键
+  注册或捕获路径，未增加第三方依赖。
+- 控制器独立审查待执行，不能预写为通过。未闭合验收：Task 9 才会将 acquire/secondary signal/
+  primary listener 接入 `main()`，并以正式双进程验证次实例退出、现有实例提示以及进程/命名对象
+  清理；真实桌面、多显示器/混合 DPI、托盘与捕获验收仍属后续任务。
