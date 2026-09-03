@@ -4,14 +4,14 @@
 - 规格：[里程碑 1：Windows 图形基础详细设计](../specs/2026-09-03-milestone-1-windows-graphics-foundation-design.md)
 - 执行分支：`codex/milestone-1-windows-graphics-foundation`
 - 工作树：`D:\Projects\LandscapeCutter\.worktrees\milestone-1-windows-graphics-foundation`
-- 当前任务：Task 2 已完成，待提交；里程碑 1 尚未完成。
+- 当前任务：Task 2 fix round 1 正在修正进度文档；初始实现已提交，尚未复审；里程碑 1 尚未完成。
 
 ## 任务状态
 
 | 任务 | 状态 | 提交 | 审查/备注 |
 |---|---|---|---|
 | Task 1：建立平台中立的显示器基础类型 | 已完成 | `e80ee84` | 首次审查：Needs fixes；fix round 1 已通过复审 |
-| Task 2：固定 Per-Monitor V2 DPI 启动边界 | 已完成（待提交） | — | RED/GREEN、manifest 提取与完整回归通过 |
+| Task 2：固定 Per-Monitor V2 DPI 启动边界 | 已实现；fix round 1 文档修正中 | `65d1113` | 首次审查：Needs fixes（技术实现/manifest/DPI/CMake 均通过；进度状态缺口）；尚未复审 |
 | Task 3：建立捕获帧值对象 | 未开始 | — | — |
 | Task 4：实现 Windows 显示器目录适配器 | 未开始 | — | — |
 | Task 5：实现 Windows Graphics Capture 捕获适配器 | 未开始 | — | — |
@@ -118,3 +118,9 @@ pwsh.exe -NoProfile -File .superpowers/sdd/2026-09-03-milestone-1-windows-graphi
 
 - `git diff --check`：通过。
 - 自审：只改动简报列出的启动、DPI、资源、测试、构建与进度文件；未改 Task 1 代码或测试，未新增第三方依赖。运行时只把 `ERROR_ACCESS_DENIED` 且当前上下文等于 Per-Monitor V2 视为可接受，其余失败会阻止 Qt 创建。
+
+### 审查与未闭合验收
+
+- 首次审查：Needs fixes。技术实现、manifest 提取、Per-Monitor V2 进程测试、应用烟雾测试和 CMake 配置均通过；唯一问题是任务状态未回填初始实现提交、缺少审查结论和未闭合验收记录。
+- fix round 1：正在修正上述进度文档；尚未复审，不预写“通过”。
+- 未闭合验收（Task 10 或后续集成）：尚未执行真实桌面上的 Windows Graphics Capture 捕获；尚未在多显示器、混合 DPI 与负坐标布局中验证捕获输出和物理坐标映射；尚未完成捕获链路与后续托盘/恢复流程的端到端集成验收。这些项目不能由本 Task 2 的进程 DPI 边界测试替代，也不应记录为通过。
