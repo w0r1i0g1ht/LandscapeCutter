@@ -41,4 +41,9 @@ add_custom_command(TARGET LandscapeCutter POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
         "$<TARGET_FILE:Qt6::QWindowsIntegrationPlugin>"
         "$<TARGET_FILE_DIR:LandscapeCutter>/platforms"
+    COMMAND ${CMAKE_COMMAND} -E make_directory
+        "$<TARGET_FILE_DIR:LandscapeCutter>/imageformats"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "$<TARGET_FILE:Qt6::QICOPlugin>"
+        "$<TARGET_FILE_DIR:LandscapeCutter>/imageformats"
 )

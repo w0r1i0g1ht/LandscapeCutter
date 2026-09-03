@@ -15,6 +15,7 @@ catch_discover_tests(landscapecutter_unit_tests)
 
 add_executable(landscapecutter_app_controller_tests
     app/AppControllerTests.cpp
+    ../resources/resources.qrc
 )
 
 target_link_libraries(landscapecutter_app_controller_tests PRIVATE
@@ -30,6 +31,11 @@ add_custom_command(TARGET landscapecutter_app_controller_tests POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
         "$<TARGET_FILE:Qt6::QOffscreenIntegrationPlugin>"
         "$<TARGET_FILE_DIR:landscapecutter_app_controller_tests>/platforms"
+    COMMAND ${CMAKE_COMMAND} -E make_directory
+        "$<TARGET_FILE_DIR:landscapecutter_app_controller_tests>/imageformats"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "$<TARGET_FILE:Qt6::QICOPlugin>"
+        "$<TARGET_FILE_DIR:landscapecutter_app_controller_tests>/imageformats"
 )
 
 catch_discover_tests(landscapecutter_app_controller_tests

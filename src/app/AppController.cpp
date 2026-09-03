@@ -16,11 +16,6 @@ AppController::AppController(QApplication& application)
 }
 
 bool AppController::start() {
-    if (!QSystemTrayIcon::isSystemTrayAvailable()) {
-        spdlog::error("System tray is not available");
-        return false;
-    }
-
     const QIcon icon(QStringLiteral(":/icons/LandscapeCutter.ico"));
     if (icon.isNull()) {
         spdlog::error("Application icon resource is unavailable");
