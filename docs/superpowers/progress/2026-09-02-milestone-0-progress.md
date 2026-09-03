@@ -61,6 +61,7 @@
 - 2026-09-03：最终修复提交 `d3eb35d` 把 vcpkg `2026.07.29` 明确拆分为 annotated tag object `c76c06644034521fb761a39f8f52d8e87d1103d5` 与 peeled commit/`HEAD` `9e593bb18ea69cc5095e012465dcd675a822ed0d`，manifest baseline 改用后者；bootstrap 还拒绝 staged/unstaged tracked 改动但允许无关 untracked 文件。CMake 使用内部 `10.0.19041.0` floor 并拒绝更低覆盖。
 - 2026-09-03：权威设计与计划已同步到最终实现，并保留最初隔离桌面自动化失败和最终 Default 桌面用户验收两段事实。启动失败提示改为可操作的安装/图标资源错误；该纯 UI 文案未增加脆弱字符串测试，真实 AppController 测试改为覆盖 qrc 注销失败与重新注册成功边界。
 - 2026-09-03：聚焦行为测试 3/3、正常 preset configure、MSBuild 和完整 CTest 8/8 均通过；`git diff --check` 与最终提交状态在提交前后另行核验。
+- 2026-09-03：最终范围复审第 2 轮补齐 bootstrap tracked-clean 的特殊索引位边界：新增真实脚本隔离行为用例，RED 证明 `assume-unchanged` 与 `skip-worktree` 都能让旧 `git status` 检查继续 provisioning；修复后结构化解析 `git --no-replace-objects ls-files -v` 并拒绝 `h`、`S`/`s`，正向场景改为无 provisioning 的 `-VerifyCheckoutOnly`，不再用特殊索引位隐藏 fake bootstrap。相关 CTest `bootstrap_identity_behavior` 通过（107.56 秒），真实 `.tools/vcpkg` 的固定 HEAD/tag object/peeled commit、tracked status 和特殊索引位均复核正确。
 
 ## 当前阻塞
 

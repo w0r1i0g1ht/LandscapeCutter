@@ -1,6 +1,8 @@
 [CmdletBinding()]
 param(
-    [string]$VcpkgRoot
+    [string]$VcpkgRoot,
+
+    [switch]$VerifyCheckoutOnly
 )
 
 Set-StrictMode -Version Latest
@@ -41,6 +43,23 @@ function Get-GitValue {
     return ($output -join [Environment]::NewLine).Trim()
 }
 
+function Get-GitLines {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string[]]$Arguments,
+
+        [Parameter(Mandatory = $true)]
+        [string]$Description
+    )
+
+    $output = @(& git --no-replace-objects -C $resolvedRoot @Arguments)
+    $exitCode = $LASTEXITCODE
+    if ($exitCode -ne 0) {
+        throw "Could not read $Description from the vcpkg checkout at $resolvedRoot."
+    }
+    return $output
+}
+
 $actualTag = Get-GitValue -Arguments @("describe", "--tags", "--exact-match", "HEAD") `
     -Description "the exact tag at HEAD"
 if ($actualTag -ne $vcpkgTag) {
@@ -74,6 +93,22 @@ $trackedChanges = Get-GitValue -Arguments @("status", "--porcelain", "--untracke
     -Description "tracked working-tree status"
 if (-not [string]::IsNullOrWhiteSpace($trackedChanges)) {
     throw "The vcpkg checkout has modified or staged tracked files. Restore the checkout before bootstrapping: $trackedChanges"
+}
+
+$indexEntries = @(Get-GitLines -Arguments @("ls-files", "-v") -Description "tracked index flags")
+foreach ($entry in $indexEntries) {
+    if ($entry.Length -lt 3 -or $entry[1] -ne ' ') {
+        throw "Could not parse tracked index flags from the vcpkg checkout at $resolvedRoot."
+    }
+
+    $indexTag = $entry[0]
+    if ($indexTag -ceq 'h' -or $indexTag -ceq 'S' -or $indexTag -ceq 's') {
+        throw "The vcpkg checkout has assume-unchanged or skip-worktree tracked files. Restore the checkout before bootstrapping: $entry"
+    }
+}
+
+if ($VerifyCheckoutOnly) {
+    return
 }
 
 & $bootstrap -disableMetrics

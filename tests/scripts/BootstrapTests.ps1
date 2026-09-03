@@ -4,7 +4,10 @@ param(
     [string]$BootstrapScript,
 
     [Parameter(Mandatory = $true)]
-    [string]$KnownGoodVcpkgRoot
+    [string]$KnownGoodVcpkgRoot,
+
+    [ValidateSet("All", "AssumeUnchanged", "SkipWorktree")]
+    [string]$Scenario = "All"
 )
 
 Set-StrictMode -Version Latest
@@ -106,7 +109,9 @@ function Invoke-Bootstrap {
         [string]$Repository,
 
         [Parameter(Mandatory = $true)]
-        [string]$MarkerPrefix
+        [string]$MarkerPrefix,
+
+        [switch]$VerifyCheckoutOnly
     )
 
     $bootstrapMarker = "$MarkerPrefix-bootstrap.txt"
@@ -114,6 +119,9 @@ function Invoke-Bootstrap {
     $startInfo = [System.Diagnostics.ProcessStartInfo]::new()
     $startInfo.FileName = "powershell.exe"
     $startInfo.Arguments = "-NoProfile -ExecutionPolicy Bypass -File `"$BootstrapScript`" -VcpkgRoot `"$Repository`""
+    if ($VerifyCheckoutOnly) {
+        $startInfo.Arguments += " -VerifyCheckoutOnly"
+    }
     $startInfo.UseShellExecute = $false
     $startInfo.RedirectStandardOutput = $true
     $startInfo.RedirectStandardError = $true
@@ -139,6 +147,67 @@ function Add-Failure {
     Write-Error -Message $Message -ErrorAction Continue
 }
 
+function Should-RunScenario {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Name
+    )
+
+    return $Scenario -eq "All" -or $Scenario -eq $Name
+}
+
+function New-AuthenticCheckout {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Path,
+
+        [Parameter(Mandatory = $true)]
+        [string]$KnownGoodRoot
+    )
+
+    & git clone --quiet --shared --no-checkout $KnownGoodRoot $Path
+    if ($LASTEXITCODE -ne 0) {
+        throw "Could not create the isolated checkout at $Path."
+    }
+    Invoke-Git -Repository $Path -Arguments @("checkout", "--quiet", "--detach", $expectedCommit) | Out-Null
+}
+
+function Assert-HiddenTrackedChangeBypassesStatus {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Repository,
+
+        [Parameter(Mandatory = $true)]
+        [string]$IndexFlag,
+
+        [Parameter(Mandatory = $true)]
+        [string]$FakeVcpkgExecutable,
+
+        [Parameter(Mandatory = $true)]
+        [string]$MarkerPrefix,
+
+        [Parameter(Mandatory = $true)]
+        [string]$FailureMessage
+    )
+
+    Invoke-Git -Repository $Repository -Arguments @(
+        "update-index", $IndexFlag, "bootstrap-vcpkg.bat", "README.md"
+    ) | Out-Null
+    Set-FakeProvisioningCommands -Repository $Repository -FakeVcpkgExecutable $FakeVcpkgExecutable
+    "hidden tracked content" | Add-Content -LiteralPath (Join-Path $Repository "README.md") -Encoding Ascii
+    $visibleStatus = Invoke-Git -Repository $Repository -Arguments @(
+        "status", "--porcelain", "--untracked-files=no"
+    )
+    if (-not [string]::IsNullOrWhiteSpace($visibleStatus)) {
+        throw "The $IndexFlag fixture did not hide its modified tracked files from git status."
+    }
+
+    $result = Invoke-Bootstrap -Repository $Repository -MarkerPrefix $MarkerPrefix
+    if ($result.ExitCode -eq 0 -or $result.BootstrapCalled -or $result.VcpkgCalled) {
+        Add-Failure $FailureMessage
+    }
+}
+
 New-Item -ItemType Directory -Path $temporaryRoot | Out-Null
 try {
     $fakeVcpkg = Join-Path $temporaryRoot "fake-vcpkg.exe"
@@ -152,22 +221,42 @@ try {
         throw "Known-good vcpkg checkout does not contain the expected peeled commit."
     }
 
-    $retaggedRepository = Join-Path $temporaryRoot "retagged"
-    New-SyntheticRepository -Path $retaggedRepository
-    "retagged" | Set-Content -LiteralPath (Join-Path $retaggedRepository "tracked.txt") -Encoding Ascii
-    Invoke-Git -Repository $retaggedRepository -Arguments @("add", "tracked.txt") | Out-Null
-    Invoke-Git -Repository $retaggedRepository -Arguments @("commit", "-m", "retag target") | Out-Null
-    Invoke-Git -Repository $retaggedRepository -Arguments @(
-        "tag", "-f", "-a", $expectedTag, "-m", "locally retagged"
-    ) | Out-Null
-    Set-FakeProvisioningCommands -Repository $retaggedRepository -FakeVcpkgExecutable $fakeVcpkg
-    Invoke-Git -Repository $retaggedRepository -Arguments @("update-index", "--assume-unchanged", "bootstrap-vcpkg.bat") | Out-Null
-    $retaggedResult = Invoke-Bootstrap -Repository $retaggedRepository `
-        -MarkerPrefix (Join-Path $temporaryRoot "retagged")
-    if ($retaggedResult.ExitCode -eq 0 -or $retaggedResult.BootstrapCalled -or $retaggedResult.VcpkgCalled) {
-        Add-Failure "A locally recreated tag with the expected name was accepted and provisioning ran."
+    if (Should-RunScenario -Name "AssumeUnchanged") {
+        $assumeUnchangedRepository = Join-Path $temporaryRoot "assume-unchanged"
+        New-AuthenticCheckout -Path $assumeUnchangedRepository -KnownGoodRoot $knownGoodRoot
+        Assert-HiddenTrackedChangeBypassesStatus -Repository $assumeUnchangedRepository `
+            -IndexFlag "--assume-unchanged" -FakeVcpkgExecutable $fakeVcpkg `
+            -MarkerPrefix (Join-Path $temporaryRoot "assume-unchanged") `
+            -FailureMessage "An assume-unchanged tracked-file change was accepted and provisioning ran."
     }
 
+    if (Should-RunScenario -Name "SkipWorktree") {
+        $skipWorktreeRepository = Join-Path $temporaryRoot "skip-worktree"
+        New-AuthenticCheckout -Path $skipWorktreeRepository -KnownGoodRoot $knownGoodRoot
+        Assert-HiddenTrackedChangeBypassesStatus -Repository $skipWorktreeRepository `
+            -IndexFlag "--skip-worktree" -FakeVcpkgExecutable $fakeVcpkg `
+            -MarkerPrefix (Join-Path $temporaryRoot "skip-worktree") `
+            -FailureMessage "A skip-worktree tracked-file change was accepted and provisioning ran."
+    }
+
+    if ($Scenario -eq "All") {
+        $retaggedRepository = Join-Path $temporaryRoot "retagged"
+        New-SyntheticRepository -Path $retaggedRepository
+        "retagged" | Set-Content -LiteralPath (Join-Path $retaggedRepository "tracked.txt") -Encoding Ascii
+        Invoke-Git -Repository $retaggedRepository -Arguments @("add", "tracked.txt") | Out-Null
+        Invoke-Git -Repository $retaggedRepository -Arguments @("commit", "-m", "retag target") | Out-Null
+        Invoke-Git -Repository $retaggedRepository -Arguments @(
+            "tag", "-f", "-a", $expectedTag, "-m", "locally retagged"
+        ) | Out-Null
+        Set-FakeProvisioningCommands -Repository $retaggedRepository -FakeVcpkgExecutable $fakeVcpkg
+        $retaggedResult = Invoke-Bootstrap -Repository $retaggedRepository `
+            -MarkerPrefix (Join-Path $temporaryRoot "retagged")
+        if ($retaggedResult.ExitCode -eq 0 -or $retaggedResult.BootstrapCalled -or $retaggedResult.VcpkgCalled) {
+            Add-Failure "A locally recreated tag with the expected name was accepted and provisioning ran."
+        }
+    }
+
+    if ($Scenario -eq "All") {
     $dirtyRepository = Join-Path $temporaryRoot "dirty"
     & git clone --quiet --shared --no-checkout $knownGoodRoot $dirtyRepository
     if ($LASTEXITCODE -ne 0) {
@@ -177,7 +266,6 @@ try {
         "sparse-checkout", "set", "--no-cone", "/bootstrap-vcpkg.bat", "/README.md"
     ) | Out-Null
     Invoke-Git -Repository $dirtyRepository -Arguments @("checkout", "--quiet", "--detach", $expectedCommit) | Out-Null
-    Invoke-Git -Repository $dirtyRepository -Arguments @("update-index", "--assume-unchanged", "bootstrap-vcpkg.bat") | Out-Null
     Set-FakeProvisioningCommands -Repository $dirtyRepository -FakeVcpkgExecutable $fakeVcpkg
     "dirty tracked content" | Add-Content -LiteralPath (Join-Path $dirtyRepository "README.md") -Encoding Ascii
     if ([string]::IsNullOrWhiteSpace((Invoke-Git -Repository $dirtyRepository -Arguments @(
@@ -200,7 +288,6 @@ try {
         "sparse-checkout", "set", "--no-cone", "/bootstrap-vcpkg.bat", "/README.md"
     ) | Out-Null
     Invoke-Git -Repository $stagedRepository -Arguments @("checkout", "--quiet", "--detach", $expectedCommit) | Out-Null
-    Invoke-Git -Repository $stagedRepository -Arguments @("update-index", "--assume-unchanged", "bootstrap-vcpkg.bat") | Out-Null
     Set-FakeProvisioningCommands -Repository $stagedRepository -FakeVcpkgExecutable $fakeVcpkg
     "staged tracked content" | Add-Content -LiteralPath (Join-Path $stagedRepository "README.md") -Encoding Ascii
     Invoke-Git -Repository $stagedRepository -Arguments @("add", "README.md") | Out-Null
@@ -211,28 +298,24 @@ try {
     }
 
     $goodRepository = Join-Path $temporaryRoot "known-good"
-    & git clone --quiet --shared --no-checkout $knownGoodRoot $goodRepository
-    if ($LASTEXITCODE -ne 0) {
-        throw "Could not create the isolated known-good checkout."
-    }
-    Invoke-Git -Repository $goodRepository -Arguments @(
-        "sparse-checkout", "set", "--no-cone", "/bootstrap-vcpkg.bat", "/README.md"
-    ) | Out-Null
-    Invoke-Git -Repository $goodRepository -Arguments @("checkout", "--quiet", "--detach", $expectedCommit) | Out-Null
-    Invoke-Git -Repository $goodRepository -Arguments @("update-index", "--assume-unchanged", "bootstrap-vcpkg.bat") | Out-Null
-    Set-FakeProvisioningCommands -Repository $goodRepository -FakeVcpkgExecutable $fakeVcpkg
+    New-AuthenticCheckout -Path $goodRepository -KnownGoodRoot $knownGoodRoot
     "allowed" | Set-Content -LiteralPath (Join-Path $goodRepository "untracked-is-allowed.txt") -Encoding Ascii
     $goodResult = Invoke-Bootstrap -Repository $goodRepository `
-        -MarkerPrefix (Join-Path $temporaryRoot "known-good")
-    if ($goodResult.ExitCode -ne 0 -or -not $goodResult.BootstrapCalled -or -not $goodResult.VcpkgCalled) {
-        Add-Failure "The authentic tag object/commit checkout did not continue through both provisioning commands: $($goodResult.Output)"
+        -MarkerPrefix (Join-Path $temporaryRoot "known-good") -VerifyCheckoutOnly
+    if ($goodResult.ExitCode -ne 0 -or $goodResult.BootstrapCalled -or $goodResult.VcpkgCalled) {
+        Add-Failure "The authentic checkout with only an untracked file did not pass checkout verification without provisioning: $($goodResult.Output)"
+    }
     }
 
     if ($failures.Count -gt 0) {
         throw "$($failures.Count) bootstrap behavior test(s) failed."
     }
 
-    Write-Output "Bootstrap identity behavior passed: retagged, unstaged-dirty, and staged-dirty checkouts rejected; authentic checkout with an untracked file continued."
+    if ($Scenario -eq "All") {
+        Write-Output "Bootstrap identity behavior passed: retagged, unstaged-dirty, staged-dirty, assume-unchanged, and skip-worktree checkouts rejected; authentic checkout with an untracked file passed checkout verification."
+    } else {
+        Write-Output "Bootstrap special index behavior passed: $Scenario tracked-file flags were rejected before provisioning."
+    }
 } finally {
     if (Test-Path -LiteralPath $temporaryRoot) {
         $resolvedTemporaryRoot = [System.IO.Path]::GetFullPath((Resolve-Path -LiteralPath $temporaryRoot).Path)
