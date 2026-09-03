@@ -1,6 +1,7 @@
 add_library(landscapecutter_app_core STATIC
     app/AppController.cpp
     app/LaunchOptions.cpp
+    platform/MonitorTypes.cpp
 )
 
 target_include_directories(landscapecutter_app_core PUBLIC
