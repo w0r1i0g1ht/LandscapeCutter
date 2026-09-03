@@ -4,7 +4,7 @@
 - 规格：[里程碑 1：Windows 图形基础详细设计](../specs/2026-09-03-milestone-1-windows-graphics-foundation-design.md)
 - 执行分支：`codex/milestone-1-windows-graphics-foundation`
 - 工作树：`D:\Projects\LandscapeCutter\.worktrees\milestone-1-windows-graphics-foundation`
-- 当前任务：Task 4 已完成实现与自动验证，任务审查待控制器执行；里程碑 1 尚未完成。
+- 当前任务：Task 4 已通过独立审查；Task 5 已完成实现与自动验证，控制器独立审查待执行；里程碑 1 尚未完成。
 
 ## 任务状态
 
@@ -13,8 +13,8 @@
 | Task 1：建立平台中立的显示器基础类型 | 已完成 | `e80ee84` | 首次审查：Needs fixes；fix round 1 已通过复审 |
 | Task 2：固定 Per-Monitor V2 DPI 启动边界 | 已完成 | `65d1113` | 首次审查：Needs fixes；fix round 1 最终复审：Clean |
 | Task 3：建立原生消息窗口与全局快捷键服务 | 已完成 | `ed04ed9` | 独立审查（`0490086`）：Clean |
-| Task 4：实现可通知现有进程的单实例协议 | 已实现；任务审查待控制器执行 | `7816279` | 自动验证完成；不预写审查通过 |
-| Task 5：实现 Windows Graphics Capture 捕获适配器 | 未开始 | — | — |
+| Task 4：实现可通知现有进程的单实例协议 | 已完成 | `7816279` | 独立审查（`13fd16a`）：Clean |
+| Task 5：建立可刷新且可测试的显示器目录 | 已实现；任务审查待控制器执行 | 待回填 | 自动验证与真实枚举诊断完成；不预写审查通过 |
 | Task 6：实现捕获协调器 | 未开始 | — | — |
 | Task 7：接入托盘捕获命令 | 未开始 | — | — |
 | Task 8：处理显示器热插拔与捕获失败 | 未开始 | — | — |
@@ -231,6 +231,66 @@ pwsh.exe -NoProfile -File .superpowers/sdd/2026-09-03-milestone-1-windows-graphi
 - 自审：event 在 mutex 前创建；命名完全使用任务书的 GUID 与后缀顺序；自动复位 event 的“先
   `SetEvent`、后监听”路径由真实内核对象和 Qt 事件循环验证；没有修改 `main()`、托盘、快捷键
   注册或捕获路径，未增加第三方依赖。
-- 控制器独立审查待执行，不能预写为通过。未闭合验收：Task 9 才会将 acquire/secondary signal/
+- 独立审查记录提交 `13fd16a`，结论为 Clean。未闭合验收：Task 9 才会将 acquire/secondary signal/
   primary listener 接入 `main()`，并以正式双进程验证次实例退出、现有实例提示以及进程/命名对象
   清理；真实桌面、多显示器/混合 DPI、托盘与捕获验收仍属后续任务。
+
+## Task 5 实施记录
+
+新增 `IDisplayTopologySource`、完整 topology record 与分层 `DisplayError`，并实现
+`WindowsDisplayTopologySource`：组合 `EnumDisplayMonitors`、`GetMonitorInfoW`、
+`GetDpiForMonitor(MDT_EFFECTIVE_DPI)`、`QueryDisplayConfig(QDC_ONLY_ACTIVE_PATHS)` 和
+`DisplayConfigGetDeviceInfo`。所有原生返回码均检查，display config 缓冲区竞争以
+`ERROR_INSUFFICIENT_BUFFER` 循环重试；DPI 必须大于零，HDR 取活动 target 的
+`advancedColorEnabled`，没有把 capability 当作当前启用状态。
+
+新增 `DisplayCatalog` 与规格第 5.1 节完整 `MonitorDescriptor`。refresh 以精确 GDI device name
+连接 native monitor 与 active path，在局部完成重复/缺失映射验证、确定性 ID 构造和 descriptor
+盖章，全部成功后才一次性发布并递增 generation。失败仅将目录标记为 unhealthy，旧快照与
+generation 均保留。`monitorContaining()` 复用 Task 1 左闭右开物理矩形语义；
+`monitorFromPoint()` 以 `MONITOR_DEFAULTTONEAREST` 取得瞬时句柄后复用目录查询。Monitor ID 由
+固定宽度小写 LUID 十六进制、十进制 target ID 和 monitor device path 的 UTF-8 文本组成。
+
+### RED
+
+首次只加入内存 fake source 的六项规格测试与 CMake 接线，尚未创建生产接口。受限环境先被
+MSBuild FileTracker `E_ACCESSDENIED` 阻断，该环境错误未计为 RED；随后在获准主机环境用指定
+PowerShell 7 包装器重跑：
+
+```powershell
+pwsh.exe -NoProfile -File .superpowers/sdd/2026-09-03-milestone-1-windows-graphics-foundation/Invoke-CleanBuildTool.ps1 cmake --build --preset windows-msvc-debug --target landscapecutter_unit_tests
+```
+
+结果：`DisplayCatalogTests.cpp(1,10)` 以 C1083 明确报告缺少
+`platform/windows/DisplayCatalog.hpp`。自审发现公开 `monitorFromPoint()` 需要直接测试后，先移除
+其实现并加入契约测试；同一命令以 LNK2019 明确报告缺少
+`DisplayCatalog::monitorFromPoint(POINT) const`，随后才恢复最小实现。
+
+### GREEN、真实枚举与回归
+
+```powershell
+pwsh.exe -NoProfile -File .superpowers/sdd/2026-09-03-milestone-1-windows-graphics-foundation/Invoke-CleanBuildTool.ps1 cmake --build --preset windows-msvc-debug --target landscapecutter_unit_tests
+pwsh.exe -NoProfile -File .superpowers/sdd/2026-09-03-milestone-1-windows-graphics-foundation/Invoke-CleanBuildTool.ps1 ctest --preset windows-msvc-debug -R "display refresh|monitor lookup|monitor ids" --output-on-failure
+```
+
+结果：目标构建成功，简报原样定向正则 `4/4` 通过；加入两个 refresh 状态名称与 Win32 point
+契约的扩展定向正则 `7/7` 通过。真实 Windows source 测试通过；安全诊断显示本环境有 `1` 台
+活动显示器，物理矩形 `[0,0,1920,1080]`、DPI `96x96`、HDR `false`，未读取或输出画面、像素、
+设备名或路径。
+
+```powershell
+pwsh.exe -NoProfile -File .superpowers/sdd/2026-09-03-milestone-1-windows-graphics-foundation/Invoke-CleanBuildTool.ps1 cmake --build --preset windows-msvc-debug
+pwsh.exe -NoProfile -File .superpowers/sdd/2026-09-03-milestone-1-windows-graphics-foundation/Invoke-CleanBuildTool.ps1 ctest --preset windows-msvc-debug --output-on-failure
+```
+
+结果：全量构建成功；完整 CTest `27/27` 通过，总耗时 `86.53` 秒。
+
+## Task 5 自审与未闭合验收
+
+- `git diff --check`：提交前待执行；实现提交待回填（`feat: add physical display catalog`）。
+- 自审：变更仅限简报列出的 platform、测试、两个 CMakeLists 与本进度文档；没有接入 `main()`、
+  捕获或 UI，未新增第三方依赖。测试 expected 使用手写矩形、LUID、target ID 与 UTF-8 字节串；
+  fake 仅提供完整数据，不断言 mock/fake 自身。
+- 控制器独立审查待执行，不能预写为通过。未闭合验收：尚未在真实多显示器、负坐标、混合 DPI、
+  HDR 开启/关闭和热插拔变化环境中人工验证目录刷新；`WM_DISPLAYCHANGE`/`WM_DEVICECHANGE` 尚未接入
+  refresh；捕获、托盘和端到端真实桌面验收仍属后续任务。

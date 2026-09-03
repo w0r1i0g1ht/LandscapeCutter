@@ -2,13 +2,19 @@ add_library(landscapecutter_app_core STATIC
     app/AppController.cpp
     app/LaunchOptions.cpp
     platform/MonitorTypes.cpp
+    platform/windows/DisplayCatalog.cpp
+    platform/windows/DisplayCatalog.hpp
+    platform/windows/DisplayTopologySource.hpp
     platform/windows/DpiAwareness.cpp
     platform/windows/GlobalHotkeyService.cpp
     platform/windows/GlobalHotkeyService.hpp
+    platform/windows/MonitorDescriptor.hpp
     platform/windows/NativeMessageWindow.cpp
     platform/windows/NativeMessageWindow.hpp
     platform/windows/SingleInstanceCoordinator.cpp
     platform/windows/SingleInstanceCoordinator.hpp
+    platform/windows/WindowsDisplayTopologySource.cpp
+    platform/windows/WindowsDisplayTopologySource.hpp
 )
 
 target_include_directories(landscapecutter_app_core PUBLIC
@@ -21,6 +27,7 @@ target_link_libraries(landscapecutter_app_core PUBLIC
     Qt6::Widgets
     spdlog::spdlog
     WIL::WIL
+    shcore
     user32
 )
 

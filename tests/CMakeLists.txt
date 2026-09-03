@@ -2,6 +2,7 @@ add_executable(landscapecutter_unit_tests
     app/AppMetadataTests.cpp
     app/LaunchOptionsTests.cpp
     platform/MonitorTypesTests.cpp
+    platform/windows/DisplayCatalogTests.cpp
 )
 
 target_link_libraries(landscapecutter_unit_tests PRIVATE
