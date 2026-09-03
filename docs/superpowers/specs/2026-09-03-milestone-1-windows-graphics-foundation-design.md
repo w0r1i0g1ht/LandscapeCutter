@@ -2,7 +2,7 @@
 
 ## 1. 文档状态
 
-- 状态：已完成交互设计确认，等待最终文档审阅
+- 状态：已批准，实施计划已制定
 - 日期：2026-09-03
 - 上位设计：[LandscapeCutter C++ 重构设计](2026-09-02-cpp-rewrite-design.md)
 - 前置里程碑：[里程碑 0：C++ 工程基础](../plans/2026-09-02-milestone-0-cpp-foundation.md)
