@@ -1,31 +1,57 @@
 # LandscapeCutter
 
-LandscapeCutter is an open-source Windows snipping, pinning, and live-region
-monitoring tool. It is inspired by the efficient workflow of Snipaste while
-remaining an independent project with its own implementation and brand.
+一款面向 Windows 10/11 的截图、贴图与窗口相对区域实时监视工具。
 
-## Status
+LandscapeCutter 正在从 Python 原型重构为 C++20 与 Qt 6。项目将先完成可靠的静态截图、
+标注和贴图工作流，再以“绑定目标窗口相对区域的实时贴图”作为特色能力。
 
-The project is being rewritten in C++20 and Qt 6.8. Milestone 0 provides the
-build system, tests, and tray application shell. Static capture, annotation,
-static pins, and live window-relative pins are delivered in subsequent
-milestones.
+## 当前状态
 
-LandscapeCutter is not affiliated with or endorsed by Snipaste.
+**里程碑 0 已完成。** 当前仓库已经切换到 C++/Qt 工程，具备可复现的构建环境、自动测试
+以及可运行的 Windows 系统托盘程序外壳。
 
-## Requirements
+当前版本还没有实现真正的截图、标注和贴图功能，暂不适合作为日常截图工具使用。下一阶段
+将建设 Windows 图形基础，包括 D3D11、Windows Graphics Capture、显示器模型、混合 DPI、
+全局快捷键和单实例运行。
 
-- Windows 10 1903 or later, including Windows 11
-- x64 processor and operating system
-- Visual Studio 2026 with the MSVC 14.5x C++ workload
-- Windows SDK 10.0.19041 or newer
-- CMake 4.4 or newer
-- Git and PowerShell
+已经完成并验证的基础能力：
 
-Qt 6.8.2, Catch2, spdlog, and WIL are installed through the pinned vcpkg
-bootstrap script.
+- C++20、Qt 6.8.2、CMake Presets 与固定版本 vcpkg 工具链；
+- Windows x64 系统托盘程序、启动通知和右键“退出”；
+- 系统托盘暂时不可用时的延迟注册；
+- Qt Windows 平台插件和 ICO 图像插件随构建产物部署；
+- Python 原型通过 Git 标签保留，主分支不再包含 Python 运行实现；
+- 自动测试 8/8 通过，真实桌面托盘交互及退出后无残影已经人工验收。
 
-## Configure and build
+## 路线图
+
+- [x] **里程碑 0：C++ 工程基础**——冻结 Python 原型，建立可构建、可测试的托盘程序。
+- [ ] **里程碑 1：Windows 图形基础**——D3D11、Windows Graphics Capture、显示器模型、
+  Per-Monitor V2 DPI、全局快捷键和单实例。
+- [ ] **里程碑 2：静态截图闭环**——冻结多显示器快照、矩形选区、复制和图片保存。
+- [ ] **里程碑 3：标注系统**——矩形、椭圆、箭头、画笔、文字、马赛克、撤销和重做。
+- [ ] **里程碑 4：静态贴图**——多个无边框置顶贴图及拖动、缩放和透明度控制。
+- [ ] **里程碑 5：实时区域贴图**——目标窗口相对选区、GPU 裁剪和实时显示。
+- [ ] **里程碑 6：产品化**——设置、快捷键配置、日志、安装包、便携包和兼容性测试。
+
+完整设计见
+[LandscapeCutter C++ 重构设计](docs/superpowers/specs/2026-09-02-cpp-rewrite-design.md)。
+
+## 环境要求
+
+- Windows 10 1903 或更高版本，包括 Windows 11；
+- x64 处理器和操作系统；
+- Visual Studio 2026，安装 MSVC 14.5x C++ 工作负载；
+- Windows SDK 10.0.19041 或更高版本；
+- CMake 4.4 或更高版本；
+- Git 和 PowerShell。
+
+Qt 6.8.2、Catch2、spdlog 和 WIL 由固定版本的 vcpkg 引导脚本安装。目前不要求安装
+Visual Studio 2022 Build Tools。
+
+## 构建
+
+在 PowerShell 中运行：
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\bootstrap.ps1
@@ -33,32 +59,38 @@ cmake --preset windows-msvc-debug
 cmake --build --preset windows-msvc-debug
 ```
 
-## Test
+首次执行引导脚本会完整克隆固定版本的 vcpkg 并安装依赖，因此需要网络连接和一定磁盘空间。
+脚本会验证 vcpkg 标签、提交和工作树状态，避免静默使用错误的依赖版本。
+
+## 测试
 
 ```powershell
-ctest --preset windows-msvc-debug
+ctest --preset windows-msvc-debug --output-on-failure
 ```
 
-## Run
+当前完整测试集包含 8 项测试。由于其中包含隔离的 vcpkg checkout 行为验证，测试通常需要
+约 1–2 分钟。
+
+## 运行
 
 ```powershell
 & .\out\build\windows-msvc-debug\src\Debug\LandscapeCutter.exe
 ```
 
-The foundation build starts as a system-tray application. Select `退出` from
-the tray menu to close it.
+程序启动后驻留在 Windows 系统托盘，并显示启动通知。右键托盘图标，选择“退出”即可关闭。
 
-## Design and roadmap
+## Python 原型
 
-The approved C++ product and architecture design is in
-[`docs/superpowers/specs/2026-09-02-cpp-rewrite-design.md`](docs/superpowers/specs/2026-09-02-cpp-rewrite-design.md).
+最终 Python 原型保存在带注释的 Git 标签 `python-prototype-final` 中。主分支只保留迁移说明，
+不再维护 Python 运行版本。安全查看方式见 [legacy/README.md](legacy/README.md)。
 
-The original Python prototype is preserved by the annotated Git tag
-`python-prototype-final`. See [`legacy/README.md`](legacy/README.md) for safe
-inspection instructions.
+## 开发文档
 
-## License
+- [C++ 重构设计](docs/superpowers/specs/2026-09-02-cpp-rewrite-design.md)
+- [里程碑 0 实施计划](docs/superpowers/plans/2026-09-02-milestone-0-cpp-foundation.md)
+- [里程碑 0 执行进度](docs/superpowers/progress/2026-09-02-milestone-0-progress.md)
 
-The repository retains its existing license status until a dedicated license
-file is added as part of release preparation. Do not redistribute binaries as
-an official release before that decision is recorded.
+## 许可证
+
+仓库目前还没有独立的许可证文件。在许可证确定并记录之前，请勿将构建产物作为正式版本重新
+分发。
