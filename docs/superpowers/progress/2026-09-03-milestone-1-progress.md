@@ -14,7 +14,7 @@
 | Task 2：固定 Per-Monitor V2 DPI 启动边界 | 已完成 | `65d1113` | 首次审查：Needs fixes；fix round 1 最终复审：Clean |
 | Task 3：建立原生消息窗口与全局快捷键服务 | 已完成 | `ed04ed9` | 独立审查（`0490086`）：Clean |
 | Task 4：实现可通知现有进程的单实例协议 | 已完成 | `7816279` | 独立审查（`13fd16a`）：Clean |
-| Task 5：建立可刷新且可测试的显示器目录 | 已实现；任务审查待控制器执行 | 待回填 | 自动验证与真实枚举诊断完成；不预写审查通过 |
+| Task 5：建立可刷新且可测试的显示器目录 | 已实现；任务审查待控制器执行 | `203dd12` | 自动验证与真实枚举诊断完成；不预写审查通过 |
 | Task 6：实现捕获协调器 | 未开始 | — | — |
 | Task 7：接入托盘捕获命令 | 未开始 | — | — |
 | Task 8：处理显示器热插拔与捕获失败 | 未开始 | — | — |
@@ -287,7 +287,7 @@ pwsh.exe -NoProfile -File .superpowers/sdd/2026-09-03-milestone-1-windows-graphi
 
 ## Task 5 自审与未闭合验收
 
-- `git diff --check`：提交前待执行；实现提交待回填（`feat: add physical display catalog`）。
+- `git diff --check`：通过；实现提交 `203dd12`（`feat: add physical display catalog`）。
 - 自审：变更仅限简报列出的 platform、测试、两个 CMakeLists 与本进度文档；没有接入 `main()`、
   捕获或 UI，未新增第三方依赖。测试 expected 使用手写矩形、LUID、target ID 与 UTF-8 字节串；
   fake 仅提供完整数据，不断言 mock/fake 自身。
