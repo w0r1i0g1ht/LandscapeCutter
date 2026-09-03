@@ -15,9 +15,9 @@
 | 任务 | 状态 | 实施提交 | 审查结果 |
 |---|---|---|---|
 | 任务 1：保留 Python 原型 | 已完成 | `bdb76c8` | 规格符合、质量通过 |
-| 任务 2：建立可复现的构建工具链 | 已完成 | `c04fcb4`、`222ddd5`、`6c8555d`、`8ef5741`、本次最终修复提交 | 固定 tag object/peeled commit/HEAD/tracked-clean；SDK floor 不可下调；行为回归通过 |
+| 任务 2：建立可复现的构建工具链 | 已完成 | `c04fcb4`、`222ddd5`、`6c8555d`、`8ef5741`、`d3eb35d` | 固定 tag object/peeled commit/HEAD/tracked-clean；SDK floor 不可下调；行为回归通过 |
 | 任务 3：以测试驱动方式建立应用接口约定 | 已完成 | `e1c79e7`、`c3a5494` | 规格符合、质量通过（1 轮修复） |
-| 任务 4：构建 Qt 托盘应用空壳 | 已完成 | `122fe99`、`4a71c42`、本次最终修复提交 | 延迟注册、offscreen/QICO、图标资源失败/成功边界及准确启动错误提示均已闭合 |
+| 任务 4：构建 Qt 托盘应用空壳 | 已完成 | `122fe99`、`4a71c42`、`d3eb35d` | 延迟注册、offscreen/QICO、图标资源失败/成功边界及准确启动错误提示均已闭合 |
 | 任务 5：移除当前 Python 运行实现并重写项目文档 | 已完成 | `fb0fc71` | 规格符合、质量通过 |
 | 任务 6：从干净构建目录验证里程碑 0 | 已完成 | 无代码提交 | 干净构建、完整 CTest、Default 桌面托盘通知/图标/菜单退出/清理验收均已通过 |
 
@@ -58,7 +58,7 @@
 - 2026-09-03：控制器在沙箱外构建成功，Task 4 聚焦回归通过、全量 CTest 6/6；产品目录确认存在 `platforms\\qwindowsd.dll` 与 `imageformats\\qicod.dll`。通过 `CreateProcess(lpDesktop=WinSta0\\Default)` 启动正式 `src\\Debug\\LandscapeCutter.exe`（PID 24940）后，Default 桌面枚举到该 PID 的 `Qt682dTrayIconMessageWindowClass` / `QTrayIconMessageWindow`；用户随后确认“看到了通知和图标，并且右键退出关闭了程序”，PID 与托盘消息窗口均消失。
 - 2026-09-03：Task 6 交互验收闭环，里程碑 0 完成。Task 4 审查保持通过；`src/main.cpp` 的启动失败提示已失真作为 1 个 deferred Minor 留待最终分支审查裁决。
 - 2026-09-03：最终分支审查提出 2 个 Important（vcpkg 身份只看标签名、权威计划仍含 fatal 托盘旧实现）和 2 个 Minor（启动失败提示失真、SDK floor 可被 `-D` 下调）。修复前行为 RED 证明同名本地重打标签与 tracked 脏检出都会执行 fake provisioning，独立 configure 也把 cache floor 改成 `10.0.10240.0`。
-- 2026-09-03：本次最终修复把 vcpkg `2026.07.29` 明确拆分为 annotated tag object `c76c06644034521fb761a39f8f52d8e87d1103d5` 与 peeled commit/`HEAD` `9e593bb18ea69cc5095e012465dcd675a822ed0d`，manifest baseline 改用后者；bootstrap 还拒绝 staged/unstaged tracked 改动但允许无关 untracked 文件。CMake 使用内部 `10.0.19041.0` floor 并拒绝更低覆盖。
+- 2026-09-03：最终修复提交 `d3eb35d` 把 vcpkg `2026.07.29` 明确拆分为 annotated tag object `c76c06644034521fb761a39f8f52d8e87d1103d5` 与 peeled commit/`HEAD` `9e593bb18ea69cc5095e012465dcd675a822ed0d`，manifest baseline 改用后者；bootstrap 还拒绝 staged/unstaged tracked 改动但允许无关 untracked 文件。CMake 使用内部 `10.0.19041.0` floor 并拒绝更低覆盖。
 - 2026-09-03：权威设计与计划已同步到最终实现，并保留最初隔离桌面自动化失败和最终 Default 桌面用户验收两段事实。启动失败提示改为可操作的安装/图标资源错误；该纯 UI 文案未增加脆弱字符串测试，真实 AppController 测试改为覆盖 qrc 注销失败与重新注册成功边界。
 - 2026-09-03：聚焦行为测试 3/3、正常 preset configure、MSBuild 和完整 CTest 8/8 均通过；`git diff --check` 与最终提交状态在提交前后另行核验。
 
