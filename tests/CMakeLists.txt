@@ -45,3 +45,25 @@ catch_discover_tests(landscapecutter_app_controller_tests
 
 add_test(NAME app_process_smoke COMMAND LandscapeCutter --smoke-test)
 set_tests_properties(app_process_smoke PROPERTIES TIMEOUT 10)
+
+find_program(POWERSHELL_EXECUTABLE powershell REQUIRED)
+
+add_test(NAME bootstrap_identity_behavior
+    COMMAND ${POWERSHELL_EXECUTABLE}
+        -NoProfile
+        -ExecutionPolicy Bypass
+        -File ${CMAKE_CURRENT_SOURCE_DIR}/scripts/BootstrapTests.ps1
+        -BootstrapScript ${CMAKE_SOURCE_DIR}/scripts/bootstrap.ps1
+        -KnownGoodVcpkgRoot ${CMAKE_SOURCE_DIR}/.tools/vcpkg
+)
+set_tests_properties(bootstrap_identity_behavior PROPERTIES TIMEOUT 120)
+
+add_test(NAME cmake_sdk_floor_behavior
+    COMMAND ${POWERSHELL_EXECUTABLE}
+        -NoProfile
+        -ExecutionPolicy Bypass
+        -File ${CMAKE_CURRENT_SOURCE_DIR}/scripts/CMakeSdkFloorTests.ps1
+        -CMakeCommand ${CMAKE_COMMAND}
+        -SourceRoot ${CMAKE_SOURCE_DIR}
+)
+set_tests_properties(cmake_sdk_floor_behavior PROPERTIES TIMEOUT 30)

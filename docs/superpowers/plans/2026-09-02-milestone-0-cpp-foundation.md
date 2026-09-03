@@ -189,7 +189,7 @@ vcpkg_installed/
   "version-string": "0.1.0-dev",
   "description": "GPU-accelerated Windows snipping, pinning, and live-region monitoring tool",
   "supports": "windows & x64",
-  "builtin-baseline": "c76c06644034521fb761a39f8f52d8e87d1103d5",
+  "builtin-baseline": "9e593bb18ea69cc5095e012465dcd675a822ed0d",
   "dependencies": [
     "catch2",
     {
@@ -215,8 +215,11 @@ vcpkg_installed/
 }
 ```
 
-`builtin-baseline` 必须对应 vcpkg 标签 `2026.07.29`。该 baseline 默认提供 Qt 6.11，
-因此必须保留 `qtbase 6.8.2#2` override；不得依赖默认版本或未固定的滚动安装。
+带注释标签 `2026.07.29` 的标签对象 ID 是
+`c76c06644034521fb761a39f8f52d8e87d1103d5`，剥离后的提交是
+`9e593bb18ea69cc5095e012465dcd675a822ed0d`。`builtin-baseline` 必须使用规范的剥离
+提交，不能误用标签对象 ID。该 baseline 默认提供 Qt 6.11，因此必须保留
+`qtbase 6.8.2#2` override；不得依赖默认版本或未固定的滚动安装。
 
 - [x] **步骤 3：更新 vcpkg 引导脚本**
 
@@ -232,6 +235,8 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
 $vcpkgTag = "2026.07.29"
+$vcpkgTagObject = "c76c06644034521fb761a39f8f52d8e87d1103d5"
+$vcpkgCommit = "9e593bb18ea69cc5095e012465dcd675a822ed0d"
 $repositoryRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot ".."))
 if ([string]::IsNullOrWhiteSpace($VcpkgRoot)) {
     $VcpkgRoot = Join-Path $repositoryRoot ".tools\vcpkg"
@@ -247,9 +252,56 @@ if (-not (Test-Path -LiteralPath $resolvedRoot)) {
     throw "The vcpkg directory exists but is not a Git checkout: $resolvedRoot"
 }
 
-$actualTag = git -C $resolvedRoot describe --tags --exact-match
-if ($LASTEXITCODE -ne 0 -or $actualTag.Trim() -ne $vcpkgTag) {
-    throw "Expected vcpkg tag $vcpkgTag at $resolvedRoot, found '$actualTag'."
+function Get-GitValue {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string[]]$Arguments,
+
+        [Parameter(Mandatory = $true)]
+        [string]$Description
+    )
+
+    $output = @(& git --no-replace-objects -C $resolvedRoot @Arguments)
+    $exitCode = $LASTEXITCODE
+    if ($exitCode -ne 0) {
+        throw "Could not read $Description from the vcpkg checkout at $resolvedRoot."
+    }
+    return ($output -join [Environment]::NewLine).Trim()
+}
+
+$actualTag = Get-GitValue -Arguments @("describe", "--tags", "--exact-match", "HEAD") `
+    -Description "the exact tag at HEAD"
+if ($actualTag -ne $vcpkgTag) {
+    throw "Expected exact vcpkg tag $vcpkgTag at $resolvedRoot, found '$actualTag'."
+}
+
+$actualTagType = Get-GitValue -Arguments @("cat-file", "-t", "refs/tags/$vcpkgTag") `
+    -Description "tag object type"
+if ($actualTagType -ne "tag") {
+    throw "Expected $vcpkgTag to be an annotated tag object, found '$actualTagType'."
+}
+
+$actualTagObject = Get-GitValue -Arguments @("rev-parse", "refs/tags/$vcpkgTag") `
+    -Description "tag object ID"
+if ($actualTagObject -ne $vcpkgTagObject) {
+    throw "Expected vcpkg tag object $vcpkgTagObject, found '$actualTagObject'. Recreate the checkout from the official tag."
+}
+
+$actualPeeledCommit = Get-GitValue -Arguments @("rev-parse", "refs/tags/$vcpkgTag^{commit}") `
+    -Description "peeled tag commit"
+if ($actualPeeledCommit -ne $vcpkgCommit) {
+    throw "Expected vcpkg tag $vcpkgTag to peel to $vcpkgCommit, found '$actualPeeledCommit'."
+}
+
+$actualHead = Get-GitValue -Arguments @("rev-parse", "HEAD") -Description "HEAD"
+if ($actualHead -ne $vcpkgCommit) {
+    throw "Expected vcpkg HEAD $vcpkgCommit, found '$actualHead'."
+}
+
+$trackedChanges = Get-GitValue -Arguments @("status", "--porcelain", "--untracked-files=no") `
+    -Description "tracked working-tree status"
+if (-not [string]::IsNullOrWhiteSpace($trackedChanges)) {
+    throw "The vcpkg checkout has modified or staged tracked files. Restore the checkout before bootstrapping: $trackedChanges"
 }
 
 & $bootstrap -disableMetrics
@@ -264,7 +316,11 @@ if ($LASTEXITCODE -ne 0) {
 ```
 
 使用完整的固定标签克隆，而不是浅克隆；`qtbase 6.8.2#2` override 需要历史 port
-tree，完整历史确保单条 bootstrap 命令可复现地解析该版本。
+tree，完整历史确保单条 bootstrap 命令可复现地解析该版本。复用已有目录时必须通过
+exact tag、annotated tag object、peeled commit、`HEAD` 和 tracked-clean 全部检查；
+`--untracked-files=no` 明确允许与固定身份无关的 untracked 文件。对应行为测试在隔离临时
+Git 仓库中执行 fake bootstrap/vcpkg 进程，证明同名重打标签和 tracked 脏检出会在任何
+provisioning 前被拒绝，而正确身份即使含 untracked 文件仍会继续。
 
 - [x] **步骤 4：更新 CMake 预设**
 
@@ -349,6 +405,17 @@ AllowShortFunctionsOnASingleLine: Empty
 ```cmake
 cmake_minimum_required(VERSION 4.4)
 
+set(LC_WINDOWS_SDK_FLOOR "10.0.19041.0")
+set(LC_EFFECTIVE_WINDOWS_SDK_FLOOR "${LC_WINDOWS_SDK_FLOOR}")
+if(DEFINED LC_MIN_WINDOWS_SDK_VERSION)
+    if(LC_MIN_WINDOWS_SDK_VERSION VERSION_LESS LC_WINDOWS_SDK_FLOOR)
+        message(FATAL_ERROR
+            "The LandscapeCutter Windows SDK floor cannot be lowered below "
+            "${LC_WINDOWS_SDK_FLOOR}; requested ${LC_MIN_WINDOWS_SDK_VERSION}.")
+    endif()
+    set(LC_EFFECTIVE_WINDOWS_SDK_FLOOR "${LC_MIN_WINDOWS_SDK_VERSION}")
+endif()
+
 project(LandscapeCutter VERSION 0.1.0 LANGUAGES CXX RC)
 
 if(NOT WIN32)
@@ -359,19 +426,17 @@ if(NOT CMAKE_SIZEOF_VOID_P EQUAL 8)
     message(FATAL_ERROR "LandscapeCutter currently supports x64 builds only.")
 endif()
 
-set(LC_MIN_WINDOWS_SDK_VERSION "10.0.19041.0" CACHE STRING
-    "Minimum supported Windows SDK version")
 if(MSVC)
     if(NOT DEFINED CMAKE_VS_WINDOWS_TARGET_PLATFORM_VERSION
        OR CMAKE_VS_WINDOWS_TARGET_PLATFORM_VERSION STREQUAL "")
         message(FATAL_ERROR
             "Could not determine the selected Windows SDK version. Install Windows SDK "
-            "${LC_MIN_WINDOWS_SDK_VERSION} or newer.")
+            "${LC_EFFECTIVE_WINDOWS_SDK_FLOOR} or newer.")
     endif()
 
-    if(CMAKE_VS_WINDOWS_TARGET_PLATFORM_VERSION VERSION_LESS LC_MIN_WINDOWS_SDK_VERSION)
+    if(CMAKE_VS_WINDOWS_TARGET_PLATFORM_VERSION VERSION_LESS LC_EFFECTIVE_WINDOWS_SDK_FLOOR)
         message(FATAL_ERROR
-            "LandscapeCutter requires Windows SDK ${LC_MIN_WINDOWS_SDK_VERSION} or newer; "
+            "LandscapeCutter requires Windows SDK ${LC_EFFECTIVE_WINDOWS_SDK_FLOOR} or newer; "
             "selected ${CMAKE_VS_WINDOWS_TARGET_PLATFORM_VERSION}.")
     endif()
 
@@ -401,6 +466,10 @@ if(BUILD_TESTING)
 endif()
 ```
 
+`LC_WINDOWS_SDK_FLOOR` 是项目内部下限。保留的 `LC_MIN_WINDOWS_SDK_VERSION` 输入只能
+维持或提高有效下限；低于 `10.0.19041.0` 的 `-D` 覆盖会在 `project()` 前明确失败，
+并由独立临时 build directory 的 configure 行为测试覆盖。
+
 创建 `src/CMakeLists.txt`：
 
 ```cmake
@@ -429,15 +498,34 @@ if (-not $vcpkgPath.StartsWith($expectedPrefix, [System.StringComparison]::Ordin
 }
 
 if (Test-Path -LiteralPath $vcpkgPath) {
-    $actualTag = git -C $vcpkgPath describe --tags --exact-match
-    if ($LASTEXITCODE -ne 0 -or $actualTag.Trim() -ne "2026.07.29") {
+    $actualTag = git --no-replace-objects -C $vcpkgPath describe --tags --exact-match HEAD
+    $tagExit = $LASTEXITCODE
+    $actualTagType = git --no-replace-objects -C $vcpkgPath cat-file -t refs/tags/2026.07.29
+    $tagTypeExit = $LASTEXITCODE
+    $actualTagObject = git --no-replace-objects -C $vcpkgPath rev-parse refs/tags/2026.07.29
+    $tagObjectExit = $LASTEXITCODE
+    $actualCommit = git --no-replace-objects -C $vcpkgPath rev-parse 'refs/tags/2026.07.29^{commit}'
+    $commitExit = $LASTEXITCODE
+    $actualHead = git --no-replace-objects -C $vcpkgPath rev-parse HEAD
+    $headExit = $LASTEXITCODE
+    $trackedChanges = git --no-replace-objects -C $vcpkgPath status --porcelain --untracked-files=no
+    $statusExit = $LASTEXITCODE
+
+    $canReuse = $tagExit -eq 0 -and $actualTag.Trim() -eq "2026.07.29" -and
+        $tagTypeExit -eq 0 -and $actualTagType.Trim() -eq "tag" -and
+        $tagObjectExit -eq 0 -and $actualTagObject.Trim() -eq "c76c06644034521fb761a39f8f52d8e87d1103d5" -and
+        $commitExit -eq 0 -and $actualCommit.Trim() -eq "9e593bb18ea69cc5095e012465dcd675a822ed0d" -and
+        $headExit -eq 0 -and $actualHead.Trim() -eq "9e593bb18ea69cc5095e012465dcd675a822ed0d" -and
+        $statusExit -eq 0 -and [string]::IsNullOrWhiteSpace($trackedChanges)
+    if (-not $canReuse) {
         Remove-Item -LiteralPath $vcpkgPath -Recurse -Force
     }
 }
 ```
 
 预期：旧 `2025.02.14` 检出被删除，仓库源文件和 `.tools` 之外的路径不受影响。
-如果目录已经是 `2026.07.29`，则保留并复用。
+只有 exact tag、annotated tag object、peeled commit、`HEAD` 和 tracked-clean 全部匹配
+时才保留并复用；无关 untracked 文件不参与这一判定。
 
 - [x] **步骤 8：引导并安装依赖**
 
@@ -771,11 +859,6 @@ AppController::AppController(QApplication& application)
 }
 
 bool AppController::start() {
-    if (!QSystemTrayIcon::isSystemTrayAvailable()) {
-        spdlog::error("System tray is not available");
-        return false;
-    }
-
     const QIcon icon(QStringLiteral(":/icons/LandscapeCutter.ico"));
     if (icon.isNull()) {
         spdlog::error("Application icon resource is unavailable");
@@ -794,6 +877,11 @@ bool AppController::start() {
 
 } // namespace lc::app
 ```
+
+Qt 6.8.2 的 `QSystemTrayIcon::visible` 语义会在系统托盘稍后出现时自动注册图标，因此
+启动时的瞬时 `isSystemTrayAvailable()` 不能作为 fatal preflight。保留 `show()` 后的
+visible 状态，让 Windows Explorer/通知区域恢复后完成延迟注册；`start()` 的失败边界只
+剩嵌入 ICO 资源无法加载。
 
 - [x] **步骤 5：实现应用入口**
 
@@ -840,7 +928,8 @@ int main(int argc, char* argv[]) {
     if (!controller.start()) {
         QMessageBox::critical(nullptr,
                               QStringLiteral("LandscapeCutter"),
-                              QStringLiteral("系统托盘不可用，程序无法启动。"));
+                              QStringLiteral("应用图标资源不可用。请重新安装 LandscapeCutter "
+                                             "或修复安装文件后再试。"));
         return 1;
     }
 
@@ -889,6 +978,19 @@ target_link_libraries(LandscapeCutter PRIVATE
 )
 
 lc_enable_warnings(LandscapeCutter)
+
+add_custom_command(TARGET LandscapeCutter POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E make_directory
+        "$<TARGET_FILE_DIR:LandscapeCutter>/platforms"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "$<TARGET_FILE:Qt6::QWindowsIntegrationPlugin>"
+        "$<TARGET_FILE_DIR:LandscapeCutter>/platforms"
+    COMMAND ${CMAKE_COMMAND} -E make_directory
+        "$<TARGET_FILE_DIR:LandscapeCutter>/imageformats"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "$<TARGET_FILE:Qt6::QICOPlugin>"
+        "$<TARGET_FILE_DIR:LandscapeCutter>/imageformats"
+)
 ```
 
 - [x] **步骤 7：构建并运行自动化测试**
@@ -903,11 +1005,71 @@ ctest --preset windows-msvc-debug
 
 预期：单元测试和 `app_process_smoke` 均通过。进程冒烟测试在 10 秒内退出，且不会创建托盘图标。
 
-- [ ] **步骤 8：执行交互式托盘冒烟测试**
+后续 Task 4 修复在 `tests/app/AppControllerTests.cpp` 增加真实 Qt 回归：测试进程使用
+`QT_QPA_PLATFORM=offscreen`，先确认该环境的系统托盘不可用，再加载真实
+`resources.qrc` 并确认 `AppController::start()` 成功。对应测试目标同时部署
+`Qt6::QOffscreenIntegrationPlugin` 与 `Qt6::QICOPlugin`；产品目标部署
+`Qt6::QWindowsIntegrationPlugin` 与 `Qt6::QICOPlugin`。这既覆盖延迟注册路径，也证明
+嵌入 ICO 的成功资源边界，不以 mock 或源码 grep 代替运行行为。
 
-当前执行桌面未提供 `Shell_TrayWnd`、`Shell_SecondaryTrayWnd` 或
-`NotifyIconOverflowWindow`，应用按设计显示“系统托盘不可用”并退出。该交互验收保留到
-任务 6，在具备 Windows 通知区域的桌面环境中执行。
+```cpp
+TEST_CASE("controller honors the icon resource boundary when the tray is initially unavailable") {
+    int argc = 1;
+    char applicationName[] = "landscapecutter_app_controller_tests";
+    char* argv[] = {applicationName, nullptr};
+    QApplication application(argc, argv);
+
+    REQUIRE_FALSE(QSystemTrayIcon::isSystemTrayAvailable());
+
+    Q_CLEANUP_RESOURCE(resources);
+    lc::app::AppController missingResourceController(application);
+    CHECK_FALSE(missingResourceController.start());
+
+    Q_INIT_RESOURCE(resources);
+    lc::app::AppController availableResourceController(application);
+    CHECK(availableResourceController.start());
+}
+```
+
+```cmake
+add_executable(landscapecutter_app_controller_tests
+    app/AppControllerTests.cpp
+    ../resources/resources.qrc
+)
+
+target_link_libraries(landscapecutter_app_controller_tests PRIVATE
+    Catch2::Catch2WithMain
+    landscapecutter_app_core
+)
+
+lc_enable_warnings(landscapecutter_app_controller_tests)
+
+add_custom_command(TARGET landscapecutter_app_controller_tests POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E make_directory
+        "$<TARGET_FILE_DIR:landscapecutter_app_controller_tests>/platforms"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "$<TARGET_FILE:Qt6::QOffscreenIntegrationPlugin>"
+        "$<TARGET_FILE_DIR:landscapecutter_app_controller_tests>/platforms"
+    COMMAND ${CMAKE_COMMAND} -E make_directory
+        "$<TARGET_FILE_DIR:landscapecutter_app_controller_tests>/imageformats"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "$<TARGET_FILE:Qt6::QICOPlugin>"
+        "$<TARGET_FILE_DIR:landscapecutter_app_controller_tests>/imageformats"
+)
+
+catch_discover_tests(landscapecutter_app_controller_tests
+    PROPERTIES
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+)
+```
+
+- [x] **步骤 8：执行交互式托盘冒烟测试**
+
+最初的 Codex 沙箱桌面未提供 `Shell_TrayWnd`、`Shell_SecondaryTrayWnd` 或
+`NotifyIconOverflowWindow`，旧 fatal preflight 因而显示“系统托盘不可用”并退出；这次
+自动化失败作为历史环境证据保留，不能算作交互通过。修复后在 `WinSta0\\Default` 启动
+正式 `src\\Debug\\LandscapeCutter.exe`，用户确认看到通知和托盘图标、通过右键菜单选择
+`退出` 后程序关闭，并确认没有灰色残影；PID 与 Qt tray-message window 消失提供独立佐证。
 
 运行：
 
@@ -1134,10 +1296,12 @@ ctest --preset windows-msvc-debug
 
 预期：配置选择 Qt 6.8.2；完整构建成功；元数据、启动参数和进程冒烟测试全部通过。
 
-- [ ] **步骤 4：再次执行交互式验收检查**
+- [x] **步骤 4：再次执行交互式验收检查**
 
-当前执行桌面的 `Shell_TrayWnd` 会消失或短暂出现，尚未可靠观察托盘图标、通知、
-“退出”菜单触发及退出后的残留图标状态。该步骤是里程碑硬退出条件，保持未完成。
+最初自动化启动位于不含通知区域的隔离桌面，未能观察托盘图标、通知、“退出”菜单或
+残留状态；该失败没有被改写为成功。最终验收改在 `WinSta0\\Default` 运行正式程序：
+用户明确确认通知和图标可见、右键 `退出` 关闭程序，并确认退出后“没有灰色残影”；
+控制器同时观察到对应 PID 与 `Qt682dTrayIconMessageWindowClass` 窗口在退出后消失。
 
 运行：
 

@@ -7,7 +7,7 @@
 - 执行分支：`codex/cpp-foundation`
 - 隔离工作树：`D:\Projects\LandscapeCutter\.worktrees\cpp-foundation`
 - 执行方式：每个任务由独立子代理实施，随后进行规格符合性与代码质量审查
-- 当前状态：里程碑 0 已完成；Task 4 托盘修复、自动化回归和真实 Default 桌面交互验收均已闭合
+- 当前状态：里程碑 0 已完成；最终分支审查的 2 个 Important 与 2 个 Minor finding 均已修复并验证
 - 完成度：6 / 6
 
 ## 任务状态
@@ -15,11 +15,11 @@
 | 任务 | 状态 | 实施提交 | 审查结果 |
 |---|---|---|---|
 | 任务 1：保留 Python 原型 | 已完成 | `bdb76c8` | 规格符合、质量通过 |
-| 任务 2：建立可复现的构建工具链 | 已完成 | `c04fcb4`、`222ddd5`、`6c8555d`、`8ef5741` | 规格符合、质量通过（2 轮修复） |
+| 任务 2：建立可复现的构建工具链 | 已完成 | `c04fcb4`、`222ddd5`、`6c8555d`、`8ef5741`、本次最终修复提交 | 固定 tag object/peeled commit/HEAD/tracked-clean；SDK floor 不可下调；行为回归通过 |
 | 任务 3：以测试驱动方式建立应用接口约定 | 已完成 | `e1c79e7`、`c3a5494` | 规格符合、质量通过（1 轮修复） |
-| 任务 4：构建 Qt 托盘应用空壳 | 已完成 | `122fe99`、`4a71c42` | 审查通过；回归与全量 CTest 6/6 通过；保留 1 个 deferred Minor（`src/main.cpp` 的启动失败提示已失真，待最终分支审查裁决） |
+| 任务 4：构建 Qt 托盘应用空壳 | 已完成 | `122fe99`、`4a71c42`、本次最终修复提交 | 延迟注册、offscreen/QICO、图标资源失败/成功边界及准确启动错误提示均已闭合 |
 | 任务 5：移除当前 Python 运行实现并重写项目文档 | 已完成 | `fb0fc71` | 规格符合、质量通过 |
-| 任务 6：从干净构建目录验证里程碑 0 | 已完成 | 无代码提交 | 干净构建、完整 CTest 6/6、Default 桌面托盘通知/图标/菜单退出/清理验收均已通过 |
+| 任务 6：从干净构建目录验证里程碑 0 | 已完成 | 无代码提交 | 干净构建、完整 CTest、Default 桌面托盘通知/图标/菜单退出/清理验收均已通过 |
 
 ## 执行记录
 
@@ -57,10 +57,14 @@
 - 2026-09-03：Task 4 完成初始不可用托盘修复 `4a71c42`：移除将瞬时 `isSystemTrayAvailable()` 结果视为致命错误的分支，部署 ICO 解码插件，并以真实 Qt/offscreen 回归测试覆盖该路径；聚焦 GREEN 与全量 CTest 均通过（6/6）。
 - 2026-09-03：控制器在沙箱外构建成功，Task 4 聚焦回归通过、全量 CTest 6/6；产品目录确认存在 `platforms\\qwindowsd.dll` 与 `imageformats\\qicod.dll`。通过 `CreateProcess(lpDesktop=WinSta0\\Default)` 启动正式 `src\\Debug\\LandscapeCutter.exe`（PID 24940）后，Default 桌面枚举到该 PID 的 `Qt682dTrayIconMessageWindowClass` / `QTrayIconMessageWindow`；用户随后确认“看到了通知和图标，并且右键退出关闭了程序”，PID 与托盘消息窗口均消失。
 - 2026-09-03：Task 6 交互验收闭环，里程碑 0 完成。Task 4 审查保持通过；`src/main.cpp` 的启动失败提示已失真作为 1 个 deferred Minor 留待最终分支审查裁决。
+- 2026-09-03：最终分支审查提出 2 个 Important（vcpkg 身份只看标签名、权威计划仍含 fatal 托盘旧实现）和 2 个 Minor（启动失败提示失真、SDK floor 可被 `-D` 下调）。修复前行为 RED 证明同名本地重打标签与 tracked 脏检出都会执行 fake provisioning，独立 configure 也把 cache floor 改成 `10.0.10240.0`。
+- 2026-09-03：本次最终修复把 vcpkg `2026.07.29` 明确拆分为 annotated tag object `c76c06644034521fb761a39f8f52d8e87d1103d5` 与 peeled commit/`HEAD` `9e593bb18ea69cc5095e012465dcd675a822ed0d`，manifest baseline 改用后者；bootstrap 还拒绝 staged/unstaged tracked 改动但允许无关 untracked 文件。CMake 使用内部 `10.0.19041.0` floor 并拒绝更低覆盖。
+- 2026-09-03：权威设计与计划已同步到最终实现，并保留最初隔离桌面自动化失败和最终 Default 桌面用户验收两段事实。启动失败提示改为可操作的安装/图标资源错误；该纯 UI 文案未增加脆弱字符串测试，真实 AppController 测试改为覆盖 qrc 注销失败与重新注册成功边界。
+- 2026-09-03：聚焦行为测试 3/3、正常 preset configure、MSBuild 和完整 CTest 8/8 均通过；`git diff --check` 与最终提交状态在提交前后另行核验。
 
 ## 当前阻塞
 
-- 无里程碑 0 阻塞。保留 1 个 deferred Minor：`src/main.cpp` 的启动失败提示已失真，待最终分支审查裁决。
+- 无里程碑 0 阻塞或 deferred finding。
 
 ## 验证汇总
 
@@ -69,7 +73,7 @@
 - 任务 1：提交 `bdb76c8` 只新增 `legacy/README.md`；独立审查无 Critical、Important 或 Minor 问题。
 - 任务 2 初始方案：vcpkg 仓库曾固定到 `2025.02.14`，`vcpkg.exe` 已生成，`.tools/` 与 `out/` 已确认被 Git 忽略；该方案随后被 VS 2026 修订取代。
 - 任务 2 初始方案：依赖安装曾失败于“Unable to find a valid Visual Studio instance”；CMake 配置曾失败于“Visual Studio 17 2022 could not find any instance”，随后按用户批准改用 VS 2026。
-- 任务 2：修复后无参数 bootstrap 已进入实际 vcpkg 检查；Windows SDK 下限 `10.0.19041.0` 已在配置期约束，并允许更高版本。
+- 任务 2：bootstrap 固定 exact tag、annotated tag object、peeled commit、`HEAD` 和 tracked-clean；Windows SDK 下限 `10.0.19041.0` 已在配置期约束，允许更高版本但拒绝更低 `-D` 覆盖。
 - 任务 2：第 1 轮范围复审结论为“全部发现已解决，无新的 Critical/Important 问题”。
 - 工具链修订探测：CMake 4.4.3 已提供 `Visual Studio 18 2026` 生成器；vcpkg `2026.07.29` 的构建脚本识别 `VisualStudioVersion` 18.x。
 - 工具链修订探测：vcpkg `2026.07.29` 的版本数据库保留 `qtbase 6.8.2`，最高 port-version 为 2，可在新 baseline 上显式 override。
@@ -90,4 +94,4 @@
 - Task 6：输出目录包含 `Qt6Cored.dll`、`Qt6Guid.dll`、`Qt6Widgetsd.dll` 和 `platforms/qwindowsd.dll`；`python-prototype-final` 为 annotated tag，当前分支无 Python 运行实现。
 - Task 6：报告第 1 轮范围复审解决 2 个 Important 和 3 个 Minor；此前的 1 个 Critical 真实托盘验收缺口已在 Default 桌面闭合。
 - Task 6：控制器通过 `CreateProcess(lpDesktop=WinSta0\\Default)` 启动正式程序 PID 24940，确认 Qt 托盘消息窗口存在；用户确认看到通知和图标，并右键选择“退出”关闭程序，随后 PID 与托盘消息窗口均消失。
-- Task 4 修复验证：提交 `4a71c42` 覆盖“系统托盘初始不可用时控制器仍可启动”，并部署 `qicod.dll` 以解码嵌入 ICO；全量 CTest 6/6 和真实 Default 桌面交互验收均完成。保留 1 个 deferred Minor：`src/main.cpp` 的启动失败提示已失真，待最终分支审查裁决。
+- Task 4 修复验证：提交 `4a71c42` 覆盖“系统托盘初始不可用时控制器仍可启动”，并部署 `qicod.dll` 以解码嵌入 ICO；最终回归进一步覆盖图标资源失败/成功边界，启动失败提示已准确指向安装/图标资源问题。完整 CTest 8/8 和真实 Default 桌面交互验收均完成。

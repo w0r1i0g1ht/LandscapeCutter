@@ -231,8 +231,9 @@ Shift+F1
 - UI：Qt 6.8 系列，LGPL 动态链接。
 - 构建：CMake 4.4 及以上版本和 CMake Presets；Windows 主预设使用
   `Visual Studio 18 2026` 生成器与 x64 架构。
-- 依赖管理：vcpkg manifest；vcpkg 固定到标签 `2026.07.29`，对应提交
-  `c76c06644034521fb761a39f8f52d8e87d1103d5`。
+- 依赖管理：vcpkg manifest；vcpkg 固定到带注释标签 `2026.07.29`。该标签对象 ID
+  为 `c76c06644034521fb761a39f8f52d8e87d1103d5`，剥离后的提交（也是检出
+  `HEAD`）为 `9e593bb18ea69cc5095e012465dcd675a822ed0d`。
 - Windows 资源管理：WIL。
 - 日志：spdlog 滚动日志。
 - 测试：Catch2。
@@ -242,11 +243,14 @@ Shift+F1
 ### 10.1 工具链固定策略
 
 - 继续使用动态链接的 `x64-windows` triplet，不引入静态 Qt 发布方式。
-- `vcpkg.json` 使用上述提交作为 `builtin-baseline`，并通过版本 override
+- `vcpkg.json` 使用上述剥离后的提交
+  `9e593bb18ea69cc5095e012465dcd675a822ed0d` 作为 `builtin-baseline`，并通过版本 override
   将 `qtbase` 固定为 `6.8.2#2`；不得直接采用该 baseline 默认的 Qt 6.11。
 - 根 CMake 配置继续拒绝 Qt 6.9 及以上版本，并验证实际解析结果为 Qt 6.8.2。
-- 引导脚本必须验证本地 vcpkg 检出恰好位于标签 `2026.07.29`，不能使用
-  未固定的 `master` 或滚动安装。
+- 引导脚本必须分别验证 exact tag 名 `2026.07.29`、带注释标签对象类型与对象 ID、
+  剥离提交、`HEAD`，并拒绝 staged 或 unstaged 的 tracked 改动；无关 untracked 文件
+  不影响固定身份。不能只凭 `git describe` 的标签名复用检出，也不能使用未固定的
+  `master` 或滚动安装。
 - 本次修订复用现有 Visual Studio 2026，不安装 Visual Studio 2022 Build Tools，
   也不通过补丁伪装旧 vcpkg 对 VS 18 的支持。
 - 未来可以增加 VS 2022 或 Ninja 兼容预设，但它们不属于里程碑 0 的验收范围。

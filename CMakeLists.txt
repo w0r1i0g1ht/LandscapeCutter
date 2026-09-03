@@ -1,5 +1,16 @@
 cmake_minimum_required(VERSION 4.4)
 
+set(LC_WINDOWS_SDK_FLOOR "10.0.19041.0")
+set(LC_EFFECTIVE_WINDOWS_SDK_FLOOR "${LC_WINDOWS_SDK_FLOOR}")
+if(DEFINED LC_MIN_WINDOWS_SDK_VERSION)
+    if(LC_MIN_WINDOWS_SDK_VERSION VERSION_LESS LC_WINDOWS_SDK_FLOOR)
+        message(FATAL_ERROR
+            "The LandscapeCutter Windows SDK floor cannot be lowered below "
+            "${LC_WINDOWS_SDK_FLOOR}; requested ${LC_MIN_WINDOWS_SDK_VERSION}.")
+    endif()
+    set(LC_EFFECTIVE_WINDOWS_SDK_FLOOR "${LC_MIN_WINDOWS_SDK_VERSION}")
+endif()
+
 project(LandscapeCutter VERSION 0.1.0 LANGUAGES CXX RC)
 
 if(NOT WIN32)
@@ -10,19 +21,17 @@ if(NOT CMAKE_SIZEOF_VOID_P EQUAL 8)
     message(FATAL_ERROR "LandscapeCutter currently supports x64 builds only.")
 endif()
 
-set(LC_MIN_WINDOWS_SDK_VERSION "10.0.19041.0" CACHE STRING
-    "Minimum supported Windows SDK version")
 if(MSVC)
     if(NOT DEFINED CMAKE_VS_WINDOWS_TARGET_PLATFORM_VERSION
        OR CMAKE_VS_WINDOWS_TARGET_PLATFORM_VERSION STREQUAL "")
         message(FATAL_ERROR
             "Could not determine the selected Windows SDK version. Install Windows SDK "
-            "${LC_MIN_WINDOWS_SDK_VERSION} or newer.")
+            "${LC_EFFECTIVE_WINDOWS_SDK_FLOOR} or newer.")
     endif()
 
-    if(CMAKE_VS_WINDOWS_TARGET_PLATFORM_VERSION VERSION_LESS LC_MIN_WINDOWS_SDK_VERSION)
+    if(CMAKE_VS_WINDOWS_TARGET_PLATFORM_VERSION VERSION_LESS LC_EFFECTIVE_WINDOWS_SDK_FLOOR)
         message(FATAL_ERROR
-            "LandscapeCutter requires Windows SDK ${LC_MIN_WINDOWS_SDK_VERSION} or newer; "
+            "LandscapeCutter requires Windows SDK ${LC_EFFECTIVE_WINDOWS_SDK_FLOOR} or newer; "
             "selected ${CMAKE_VS_WINDOWS_TARGET_PLATFORM_VERSION}.")
     endif()
 

@@ -38,7 +38,8 @@ int main(int argc, char* argv[]) {
     if (!controller.start()) {
         QMessageBox::critical(nullptr,
                               QStringLiteral("LandscapeCutter"),
-                              QStringLiteral("系统托盘不可用，程序无法启动。"));
+                              QStringLiteral("应用图标资源不可用。请重新安装 LandscapeCutter "
+                                             "或修复安装文件后再试。"));
         return 1;
     }
 

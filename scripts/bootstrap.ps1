@@ -7,6 +7,8 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
 $vcpkgTag = "2026.07.29"
+$vcpkgTagObject = "c76c06644034521fb761a39f8f52d8e87d1103d5"
+$vcpkgCommit = "9e593bb18ea69cc5095e012465dcd675a822ed0d"
 $repositoryRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot ".."))
 if ([string]::IsNullOrWhiteSpace($VcpkgRoot)) {
     $VcpkgRoot = Join-Path $repositoryRoot ".tools\vcpkg"
@@ -22,9 +24,56 @@ if (-not (Test-Path -LiteralPath $resolvedRoot)) {
     throw "The vcpkg directory exists but is not a Git checkout: $resolvedRoot"
 }
 
-$actualTag = git -C $resolvedRoot describe --tags --exact-match
-if ($LASTEXITCODE -ne 0 -or $actualTag.Trim() -ne $vcpkgTag) {
-    throw "Expected vcpkg tag $vcpkgTag at $resolvedRoot, found '$actualTag'."
+function Get-GitValue {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string[]]$Arguments,
+
+        [Parameter(Mandatory = $true)]
+        [string]$Description
+    )
+
+    $output = @(& git --no-replace-objects -C $resolvedRoot @Arguments)
+    $exitCode = $LASTEXITCODE
+    if ($exitCode -ne 0) {
+        throw "Could not read $Description from the vcpkg checkout at $resolvedRoot."
+    }
+    return ($output -join [Environment]::NewLine).Trim()
+}
+
+$actualTag = Get-GitValue -Arguments @("describe", "--tags", "--exact-match", "HEAD") `
+    -Description "the exact tag at HEAD"
+if ($actualTag -ne $vcpkgTag) {
+    throw "Expected exact vcpkg tag $vcpkgTag at $resolvedRoot, found '$actualTag'."
+}
+
+$actualTagType = Get-GitValue -Arguments @("cat-file", "-t", "refs/tags/$vcpkgTag") `
+    -Description "tag object type"
+if ($actualTagType -ne "tag") {
+    throw "Expected $vcpkgTag to be an annotated tag object, found '$actualTagType'."
+}
+
+$actualTagObject = Get-GitValue -Arguments @("rev-parse", "refs/tags/$vcpkgTag") `
+    -Description "tag object ID"
+if ($actualTagObject -ne $vcpkgTagObject) {
+    throw "Expected vcpkg tag object $vcpkgTagObject, found '$actualTagObject'. Recreate the checkout from the official tag."
+}
+
+$actualPeeledCommit = Get-GitValue -Arguments @("rev-parse", "refs/tags/$vcpkgTag^{commit}") `
+    -Description "peeled tag commit"
+if ($actualPeeledCommit -ne $vcpkgCommit) {
+    throw "Expected vcpkg tag $vcpkgTag to peel to $vcpkgCommit, found '$actualPeeledCommit'."
+}
+
+$actualHead = Get-GitValue -Arguments @("rev-parse", "HEAD") -Description "HEAD"
+if ($actualHead -ne $vcpkgCommit) {
+    throw "Expected vcpkg HEAD $vcpkgCommit, found '$actualHead'."
+}
+
+$trackedChanges = Get-GitValue -Arguments @("status", "--porcelain", "--untracked-files=no") `
+    -Description "tracked working-tree status"
+if (-not [string]::IsNullOrWhiteSpace($trackedChanges)) {
+    throw "The vcpkg checkout has modified or staged tracked files. Restore the checkout before bootstrapping: $trackedChanges"
 }
 
 & $bootstrap -disableMetrics
