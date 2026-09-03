@@ -4,13 +4,13 @@
 - 规格：[里程碑 1：Windows 图形基础详细设计](../specs/2026-09-03-milestone-1-windows-graphics-foundation-design.md)
 - 执行分支：`codex/milestone-1-windows-graphics-foundation`
 - 工作树：`D:\Projects\LandscapeCutter\.worktrees\milestone-1-windows-graphics-foundation`
-- 当前任务：Task 1 已完成；里程碑 1 尚未完成。
+- 当前任务：Task 1 实现已完成；正在修正首次任务审查指出的进度文档状态；里程碑 1 尚未完成。
 
 ## 任务状态
 
-| 任务 | 状态 | 提交 | 备注 |
+| 任务 | 状态 | 提交 | 审查/备注 |
 |---|---|---|---|
-| Task 1：建立平台中立的显示器基础类型 | 已完成 | 待提交 | RED/GREEN 与完整回归通过 |
+| Task 1：建立平台中立的显示器基础类型 | 已完成（文档修正中） | `e80ee84` | 首次审查：Needs fixes；RED/GREEN 与完整回归通过 |
 | Task 2：建立显示器目录 | 未开始 | — | — |
 | Task 3：建立捕获帧值对象 | 未开始 | — | — |
 | Task 4：实现 Windows 显示器目录适配器 | 未开始 | — | — |
@@ -58,5 +58,6 @@ pwsh.exe -NoProfile -File .superpowers/sdd/2026-09-03-milestone-1-windows-graphi
 ## Task 1 验证结论
 
 - `git diff --check`：通过。
-- 自审：仅包含简报指定的 5 类文件变更；未新增依赖、未记录用户内容；接口、整数宽度和半开区间语义与简报一致。
+- 首次任务审查：Needs fixes，问题为本表提交字段误写“待提交”且缺少审查条目；本轮仅修正文档，尚未进行复审，不能预先记录为通过。
+- 自审：本轮仅修正进度文档状态；未新增依赖、未记录用户内容；接口、整数宽度和半开区间语义与简报一致。
 - 桌面人工验收：不适用于本任务；真实桌面捕获留待后续任务。
