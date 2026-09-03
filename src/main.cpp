@@ -1,11 +1,16 @@
 #include "app/AppController.hpp"
 #include "app/AppMetadata.hpp"
 #include "app/LaunchOptions.hpp"
+#include "platform/windows/DpiAwareness.hpp"
 
 #include <QApplication>
 #include <QCoreApplication>
 #include <QMessageBox>
 #include <QTimer>
+
+#include <Windows.h>
+
+#include <winrt/base.h>
 
 #include <string_view>
 #include <vector>
@@ -15,6 +20,16 @@ int main(int argc, char* argv[]) {
     arguments.reserve(static_cast<std::size_t>(argc));
     for (int index = 0; index < argc; ++index) {
         arguments.emplace_back(argv[index]);
+    }
+
+    winrt::init_apartment(winrt::apartment_type::single_threaded);
+    if (lc::platform::windows::ensurePerMonitorV2().status ==
+        lc::platform::windows::DpiSetupStatus::Failed) {
+        MessageBoxW(nullptr,
+                    L"物理坐标模式不可用。请确认系统支持 Per-Monitor V2 DPI 感知后再试。",
+                    L"LandscapeCutter",
+                    MB_OK | MB_ICONERROR);
+        return 1;
     }
 
     QApplication application(argc, argv);

@@ -44,6 +44,24 @@ catch_discover_tests(landscapecutter_app_controller_tests
         ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
 )
 
+add_executable(landscapecutter_dpi_tests
+    platform/windows/DpiAwarenessTests.cpp
+    ${CMAKE_SOURCE_DIR}/resources/windows/LandscapeCutter.rc
+)
+
+target_link_libraries(landscapecutter_dpi_tests PRIVATE
+    Catch2::Catch2WithMain
+    landscapecutter_app_core
+)
+
+target_link_options(landscapecutter_dpi_tests PRIVATE
+    /MANIFEST:NO
+)
+
+lc_enable_warnings(landscapecutter_dpi_tests)
+
+catch_discover_tests(landscapecutter_dpi_tests)
+
 add_test(NAME app_process_smoke COMMAND LandscapeCutter --smoke-test)
 set_tests_properties(app_process_smoke PROPERTIES TIMEOUT 10)
 

@@ -2,6 +2,7 @@ add_library(landscapecutter_app_core STATIC
     app/AppController.cpp
     app/LaunchOptions.cpp
     platform/MonitorTypes.cpp
+    platform/windows/DpiAwareness.cpp
 )
 
 target_include_directories(landscapecutter_app_core PUBLIC
@@ -28,10 +29,16 @@ lc_enable_warnings(landscapecutter_app_core)
 qt_add_executable(LandscapeCutter WIN32
     main.cpp
     ../resources/resources.qrc
+    ../resources/windows/LandscapeCutter.rc
 )
 
 target_link_libraries(LandscapeCutter PRIVATE
     landscapecutter_app_core
+    runtimeobject
+)
+
+target_link_options(LandscapeCutter PRIVATE
+    /MANIFEST:NO
 )
 
 lc_enable_warnings(LandscapeCutter)

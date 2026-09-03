@@ -4,14 +4,14 @@
 - 规格：[里程碑 1：Windows 图形基础详细设计](../specs/2026-09-03-milestone-1-windows-graphics-foundation-design.md)
 - 执行分支：`codex/milestone-1-windows-graphics-foundation`
 - 工作树：`D:\Projects\LandscapeCutter\.worktrees\milestone-1-windows-graphics-foundation`
-- 当前任务：Task 1 实现已完成；正在修正首次任务审查指出的进度文档状态；里程碑 1 尚未完成。
+- 当前任务：Task 2 已完成，待提交；里程碑 1 尚未完成。
 
 ## 任务状态
 
 | 任务 | 状态 | 提交 | 审查/备注 |
 |---|---|---|---|
-| Task 1：建立平台中立的显示器基础类型 | 已完成（文档修正中） | `e80ee84` | 首次审查：Needs fixes；RED/GREEN 与完整回归通过 |
-| Task 2：建立显示器目录 | 未开始 | — | — |
+| Task 1：建立平台中立的显示器基础类型 | 已完成 | `e80ee84` | 首次审查：Needs fixes；fix round 1 已通过复审 |
+| Task 2：固定 Per-Monitor V2 DPI 启动边界 | 已完成（待提交） | — | RED/GREEN、manifest 提取与完整回归通过 |
 | Task 3：建立捕获帧值对象 | 未开始 | — | — |
 | Task 4：实现 Windows 显示器目录适配器 | 未开始 | — | — |
 | Task 5：实现 Windows Graphics Capture 捕获适配器 | 未开始 | — | — |
@@ -58,6 +58,63 @@ pwsh.exe -NoProfile -File .superpowers/sdd/2026-09-03-milestone-1-windows-graphi
 ## Task 1 验证结论
 
 - `git diff --check`：通过。
-- 首次任务审查：Needs fixes，问题为本表提交字段误写“待提交”且缺少审查条目；本轮仅修正文档，尚未进行复审，不能预先记录为通过。
-- 自审：本轮仅修正进度文档状态；未新增依赖、未记录用户内容；接口、整数宽度和半开区间语义与简报一致。
+- 首次任务审查：Needs fixes，问题为本表提交字段误写“待提交”且缺少审查条目；fix round 1 已通过复审。
+- 自审：文档修正未改动 Task 1 代码或测试；未新增依赖、未记录用户内容；接口、整数宽度和半开区间语义与简报一致。
 - 桌面人工验收：不适用于本任务；真实桌面捕获留待后续任务。
+
+## Task 2 实施记录
+
+新增 `lc::platform::windows::ensurePerMonitorV2()` 与
+`isPerMonitorV2()`，以及 `DpiSetupStatus` / `DpiSetupResult`。manifest 同时声明
+Windows 10 compatibility、`PerMonitorV2` 与 `true/pm`，并由 RC 资源嵌入应用及独立
+`landscapecutter_dpi_tests` 目标。为避免 MSVC 自动生成的 manifest 与 ID 1 资源冲突，两个
+目标禁用链接器的自动 manifest，保留同一显式 RC manifest。`main()` 在收集参数并初始化
+C++/WinRT STA apartment 后、构造 `QApplication` 前验证 DPI；失败时显示原生 `MessageBoxW`
+并返回非零。
+
+### RED
+
+命令（按主机约束通过包装器执行）：
+
+```powershell
+pwsh.exe -NoProfile -File .superpowers/sdd/2026-09-03-milestone-1-windows-graphics-foundation/Invoke-CleanBuildTool.ps1 cmake --build --preset windows-msvc-debug --target landscapecutter_dpi_tests
+```
+
+结果：构建失败，`DpiAwarenessTests.cpp(1,10)` 明确报告
+`platform/windows/DpiAwareness.hpp` 不存在（C1083），符合 DPI 类型/实现尚未添加的预期。
+
+### GREEN、manifest 与回归
+
+```powershell
+pwsh.exe -NoProfile -File .superpowers/sdd/2026-09-03-milestone-1-windows-graphics-foundation/Invoke-CleanBuildTool.ps1 cmake --build --preset windows-msvc-debug
+```
+
+结果：全量构建成功，生成 `LandscapeCutter.exe` 与 `landscapecutter_dpi_tests.exe`。
+
+```powershell
+pwsh.exe -NoProfile -File .superpowers/sdd/2026-09-03-milestone-1-windows-graphics-foundation/Invoke-CleanBuildTool.ps1 ctest --preset windows-msvc-debug -R "Per-Monitor V2|app_process_smoke" --output-on-failure
+```
+
+结果：2/2 通过，包括 `the process runs as Per-Monitor V2 before Qt exists` 和
+`app_process_smoke`。
+
+```powershell
+& 'D:\Windows Kits\10\bin\10.0.28000.0\x64\mt.exe' -nologo `
+  '-inputresource:out\build\windows-msvc-debug\src\Debug\LandscapeCutter.exe;#1' `
+  "-out:$env:TEMP\LandscapeCutter.manifest.xml"
+Select-String -Path $env:TEMP\LandscapeCutter.manifest.xml -Pattern "PerMonitorV2"
+```
+
+提取证据：`LandscapeCutter.manifest.xml:10` 包含
+`<dpiAwareness ...>PerMonitorV2</dpiAwareness>`。
+
+```powershell
+pwsh.exe -NoProfile -File .superpowers/sdd/2026-09-03-milestone-1-windows-graphics-foundation/Invoke-CleanBuildTool.ps1 ctest --preset windows-msvc-debug --output-on-failure
+```
+
+结果：12/12 通过；CTest 最终日志记录 `cmake_sdk_floor_behavior` 为第 12 项通过。
+
+## Task 2 验证结论
+
+- `git diff --check`：通过。
+- 自审：只改动简报列出的启动、DPI、资源、测试、构建与进度文件；未改 Task 1 代码或测试，未新增第三方依赖。运行时只把 `ERROR_ACCESS_DENIED` 且当前上下文等于 Per-Monitor V2 视为可接受，其余失败会阻止 Qt 创建。
