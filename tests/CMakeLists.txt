@@ -76,6 +76,20 @@ lc_enable_warnings(landscapecutter_platform_message_tests)
 
 catch_discover_tests(landscapecutter_platform_message_tests)
 
+add_executable(landscapecutter_single_instance_tests
+    platform/windows/SingleInstanceCoordinatorTests.cpp
+)
+
+target_link_libraries(landscapecutter_single_instance_tests PRIVATE
+    Catch2::Catch2
+    landscapecutter_app_core
+    ole32
+)
+
+lc_enable_warnings(landscapecutter_single_instance_tests)
+
+catch_discover_tests(landscapecutter_single_instance_tests)
+
 add_test(NAME app_process_smoke COMMAND LandscapeCutter --smoke-test)
 set_tests_properties(app_process_smoke PROPERTIES TIMEOUT 10)
 

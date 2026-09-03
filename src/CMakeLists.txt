@@ -7,6 +7,8 @@ add_library(landscapecutter_app_core STATIC
     platform/windows/GlobalHotkeyService.hpp
     platform/windows/NativeMessageWindow.cpp
     platform/windows/NativeMessageWindow.hpp
+    platform/windows/SingleInstanceCoordinator.cpp
+    platform/windows/SingleInstanceCoordinator.hpp
 )
 
 target_include_directories(landscapecutter_app_core PUBLIC
