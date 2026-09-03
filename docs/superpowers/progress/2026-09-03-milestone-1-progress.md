@@ -4,7 +4,7 @@
 - 规格：[里程碑 1：Windows 图形基础详细设计](../specs/2026-09-03-milestone-1-windows-graphics-foundation-design.md)
 - 执行分支：`codex/milestone-1-windows-graphics-foundation`
 - 工作树：`D:\Projects\LandscapeCutter\.worktrees\milestone-1-windows-graphics-foundation`
-- 当前任务：Task 3 已完成实现与自动验证，正在准备实现提交；里程碑 1 尚未完成。
+- 当前任务：Task 3 已完成实现与自动验证，任务审查待控制器执行；里程碑 1 尚未完成。
 
 ## 任务状态
 
@@ -12,7 +12,7 @@
 |---|---|---|---|
 | Task 1：建立平台中立的显示器基础类型 | 已完成 | `e80ee84` | 首次审查：Needs fixes；fix round 1 已通过复审 |
 | Task 2：固定 Per-Monitor V2 DPI 启动边界 | 已完成 | `65d1113` | 首次审查：Needs fixes；fix round 1 最终复审：Clean |
-| Task 3：建立原生消息窗口与全局快捷键服务 | 已实现；提交待回填 | 待创建 | 自动验证完成 |
+| Task 3：建立原生消息窗口与全局快捷键服务 | 已实现；任务审查待控制器执行 | `ed04ed9` | 自动验证完成；不预写审查通过 |
 | Task 4：实现 Windows 显示器目录适配器 | 未开始 | — | — |
 | Task 5：实现 Windows Graphics Capture 捕获适配器 | 未开始 | — | — |
 | Task 6：实现捕获协调器 | 未开始 | — | — |
@@ -183,6 +183,8 @@ pwsh.exe -NoProfile -File .superpowers/sdd/2026-09-03-milestone-1-windows-graphi
 - 自审：仅改动 Task 3 列出的平台窗口/热键、测试、CMake 与进度文档；未改动 Task 1
   `MonitorTypes` 或 Task 2 DPI/manifest/main 启动边界，未新增第三方依赖。生产窗口没有可见样式
   或显示调用；测试仅使用 `VK_F24`。
+- 实现提交：`ed04ed9`（`feat: add native messages and global hotkeys`）。任务审查待控制器执行；
+  尚无审查通过结论。
 - 未闭合验收：产品 `{0x4C43, MOD_NOREPEAT, VK_F1}` 尚未在 Task 9 composition root 注册；
   尚未完成真实桌面捕获、多显示器/混合 DPI、托盘与退出流程的集成/人工验收。上述项目均不因
   本任务的自动测试而视为通过。
