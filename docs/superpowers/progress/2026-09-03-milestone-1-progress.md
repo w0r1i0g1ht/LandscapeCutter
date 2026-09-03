@@ -4,15 +4,15 @@
 - 规格：[里程碑 1：Windows 图形基础详细设计](../specs/2026-09-03-milestone-1-windows-graphics-foundation-design.md)
 - 执行分支：`codex/milestone-1-windows-graphics-foundation`
 - 工作树：`D:\Projects\LandscapeCutter\.worktrees\milestone-1-windows-graphics-foundation`
-- 当前任务：Task 2 fix round 1 正在修正进度文档；初始实现已提交，尚未复审；里程碑 1 尚未完成。
+- 当前任务：Task 3 已完成实现与自动验证，正在准备实现提交；里程碑 1 尚未完成。
 
 ## 任务状态
 
 | 任务 | 状态 | 提交 | 审查/备注 |
 |---|---|---|---|
 | Task 1：建立平台中立的显示器基础类型 | 已完成 | `e80ee84` | 首次审查：Needs fixes；fix round 1 已通过复审 |
-| Task 2：固定 Per-Monitor V2 DPI 启动边界 | 已实现；fix round 1 文档修正中 | `65d1113` | 首次审查：Needs fixes（技术实现/manifest/DPI/CMake 均通过；进度状态缺口）；尚未复审 |
-| Task 3：建立捕获帧值对象 | 未开始 | — | — |
+| Task 2：固定 Per-Monitor V2 DPI 启动边界 | 已完成 | `65d1113` | 首次审查：Needs fixes；fix round 1 最终复审：Clean |
+| Task 3：建立原生消息窗口与全局快捷键服务 | 已实现；提交待回填 | 待创建 | 自动验证完成 |
 | Task 4：实现 Windows 显示器目录适配器 | 未开始 | — | — |
 | Task 5：实现 Windows Graphics Capture 捕获适配器 | 未开始 | — | — |
 | Task 6：实现捕获协调器 | 未开始 | — | — |
@@ -122,5 +122,67 @@ pwsh.exe -NoProfile -File .superpowers/sdd/2026-09-03-milestone-1-windows-graphi
 ### 审查与未闭合验收
 
 - 首次审查：Needs fixes。技术实现、manifest 提取、Per-Monitor V2 进程测试、应用烟雾测试和 CMake 配置均通过；唯一问题是任务状态未回填初始实现提交、缺少审查结论和未闭合验收记录。
-- fix round 1：正在修正上述进度文档；尚未复审，不预写“通过”。
+- fix round 1：已修正上述进度文档；最终复审结论为 Clean。
 - 未闭合验收（Task 10 或后续集成）：尚未执行真实桌面上的 Windows Graphics Capture 捕获；尚未在多显示器、混合 DPI 与负坐标布局中验证捕获输出和物理坐标映射；尚未完成捕获链路与后续托盘/恢复流程的端到端集成验收。这些项目不能由本 Task 2 的进程 DPI 边界测试替代，也不应记录为通过。
+
+## Task 3 实施记录
+
+新增 `lc::platform::windows::NativeMessageWindow`，它在 Qt 主线程创建不可见的顶层
+`WS_POPUP` 窗口，扩展样式为 `WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE`，固定类名为
+`LandscapeCutter.NativeMessageWindow`。窗口不调用 `ShowWindow`，不是 `HWND_MESSAGE`，并把
+`WM_HOTKEY`、`WM_DISPLAYCHANGE` 与 `WM_DEVICECHANGE` 转为类型化 Qt 信号；`WM_CLOSE` 请求 Qt
+退出。HWND 和窗口类注册均由对象生命周期管理，析构断言在对象所属线程销毁 HWND，最后一个
+窗口销毁后注销类。
+
+新增 `GlobalHotkeyService`，接收调用方给出的 `HotkeyBinding` 并使用 `RegisterHotKey`。
+重复注册先释放旧 binding；`ERROR_HOTKEY_ALREADY_REGISTERED` 映射为 `Conflict`，其他失败映射
+为 `Failed`，析构会注销已注册的热键。服务只将当前 binding ID 的原生热键消息发为
+`activated()`。本任务没有注册产品 `F1`、没有创建用户可见窗口，也没有接入捕获流程；Task 9
+将以 `{0x4C43, MOD_NOREPEAT, VK_F1}` 作为产品 binding 完成 composition root 接入。
+
+独立目标 `landscapecutter_platform_message_tests` 用自定义 Catch2 main 创建一个
+`QCoreApplication`。它对真实 HWND 使用 `PostMessageW`，不创建任何用户可见 Qt 或 Win32 窗口。
+
+### RED
+
+首次仅加入原生消息窗口契约测试后，按主机约束通过包装器执行：
+
+```powershell
+pwsh.exe -NoProfile -File .superpowers/sdd/2026-09-03-milestone-1-windows-graphics-foundation/Invoke-CleanBuildTool.ps1 cmake --build --preset windows-msvc-debug --target landscapecutter_platform_message_tests
+```
+
+提升环境中的实际结果：编译在
+`NativeMessageWindowTests.cpp(3,10)` 以 C1083 失败，明确缺少
+`platform/windows/NativeMessageWindow.hpp`。受限环境首次运行被 MSBuild FileTracker
+`E_ACCESSDENIED` 阻断，未将该环境错误误记为 RED。
+
+原生消息窗口 GREEN 后加入全局热键契约测试，再次执行同一命令；编译在
+`GlobalHotkeyServiceTests.cpp(1,10)` 以 C1083 失败，明确缺少
+`platform/windows/GlobalHotkeyService.hpp`。两个 RED 均由尚不存在的生产接口导致。
+
+### GREEN 与回归
+
+```powershell
+pwsh.exe -NoProfile -File .superpowers/sdd/2026-09-03-milestone-1-windows-graphics-foundation/Invoke-CleanBuildTool.ps1 cmake --build --preset windows-msvc-debug --target landscapecutter_platform_message_tests
+pwsh.exe -NoProfile -File .superpowers/sdd/2026-09-03-milestone-1-windows-graphics-foundation/Invoke-CleanBuildTool.ps1 ctest --preset windows-msvc-debug -R "native message|global hotkey" --output-on-failure
+```
+
+结果：目标构建成功，定向 CTest `4/4` 通过。原生窗口测试验证有效但不可见的顶层工具窗口、
+热键 ID 转发及显示/设备变化广播；热键测试用 `VK_F24` 验证首次注册、重注册、第二窗口冲突、
+精确一次激活和注销后的重新注册，不占用产品 `F1`。
+
+```powershell
+pwsh.exe -NoProfile -File .superpowers/sdd/2026-09-03-milestone-1-windows-graphics-foundation/Invoke-CleanBuildTool.ps1 cmake --build --preset windows-msvc-debug
+pwsh.exe -NoProfile -File .superpowers/sdd/2026-09-03-milestone-1-windows-graphics-foundation/Invoke-CleanBuildTool.ps1 ctest --preset windows-msvc-debug --output-on-failure
+```
+
+结果：全量构建成功；CTest `16/16` 通过。
+
+## Task 3 自审与未闭合验收
+
+- 自审：仅改动 Task 3 列出的平台窗口/热键、测试、CMake 与进度文档；未改动 Task 1
+  `MonitorTypes` 或 Task 2 DPI/manifest/main 启动边界，未新增第三方依赖。生产窗口没有可见样式
+  或显示调用；测试仅使用 `VK_F24`。
+- 未闭合验收：产品 `{0x4C43, MOD_NOREPEAT, VK_F1}` 尚未在 Task 9 composition root 注册；
+  尚未完成真实桌面捕获、多显示器/混合 DPI、托盘与退出流程的集成/人工验收。上述项目均不因
+  本任务的自动测试而视为通过。

@@ -62,6 +62,20 @@ lc_enable_warnings(landscapecutter_dpi_tests)
 
 catch_discover_tests(landscapecutter_dpi_tests)
 
+add_executable(landscapecutter_platform_message_tests
+    platform/windows/NativeMessageWindowTests.cpp
+    platform/windows/GlobalHotkeyServiceTests.cpp
+)
+
+target_link_libraries(landscapecutter_platform_message_tests PRIVATE
+    Catch2::Catch2
+    landscapecutter_app_core
+)
+
+lc_enable_warnings(landscapecutter_platform_message_tests)
+
+catch_discover_tests(landscapecutter_platform_message_tests)
+
 add_test(NAME app_process_smoke COMMAND LandscapeCutter --smoke-test)
 set_tests_properties(app_process_smoke PROPERTIES TIMEOUT 10)
 
