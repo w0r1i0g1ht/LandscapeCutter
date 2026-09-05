@@ -4,7 +4,7 @@
 - 规格：[里程碑 1：Windows 图形基础详细设计](../specs/2026-09-03-milestone-1-windows-graphics-foundation-design.md)
 - 执行分支：`codex/milestone-1-windows-graphics-foundation`
 - 工作树：`D:\Projects\LandscapeCutter\.worktrees\milestone-1-windows-graphics-foundation`
-- 当前任务：Task 4 已通过独立审查；Task 5 已完成实现与自动验证，控制器独立审查待执行；里程碑 1 尚未完成。
+- 当前任务：Tasks 1–5 已完成并通过独立审查；Task 6 已完成恢复实现与自动验证，控制器独立审查待执行；里程碑 1 尚未完成。
 
 ## 任务状态
 
@@ -14,11 +14,11 @@
 | Task 2：固定 Per-Monitor V2 DPI 启动边界 | 已完成 | `65d1113` | 首次审查：Needs fixes；fix round 1 最终复审：Clean |
 | Task 3：建立原生消息窗口与全局快捷键服务 | 已完成 | `ed04ed9` | 独立审查（`0490086`）：Clean |
 | Task 4：实现可通知现有进程的单实例协议 | 已完成 | `7816279` | 独立审查（`13fd16a`）：Clean |
-| Task 5：建立可刷新且可测试的显示器目录 | 已实现；任务审查待控制器执行 | `203dd12` | 自动验证与真实枚举诊断完成；不预写审查通过 |
-| Task 6：实现捕获协调器 | 未开始 | — | — |
-| Task 7：接入托盘捕获命令 | 未开始 | — | — |
-| Task 8：处理显示器热插拔与捕获失败 | 未开始 | — | — |
-| Task 9：完成多显示器与 DPI 验收 | 未开始 | — | — |
+| Task 5：建立可刷新且可测试的显示器目录 | 已完成 | `203dd12` | 控制器台账确认 `13fd16a..4348900` 独立审查：Clean |
+| Task 6：建立 D3D11 设备、WARP 降级与自有纹理 | 已实现；任务审查待控制器执行 | 待首次提交后回填 | 自动验证和真实 Hardware/WARP 验收完成；不预写审查通过 |
+| Task 7：实现 WGC 显示器单帧捕获服务 | 未开始 | — | — |
+| Task 8：实现捕获业务状态与设备恢复 | 未开始 | — | — |
+| Task 9：接入托盘、F1、显示器刷新与单实例启动 | 未开始 | — | — |
 | Task 10：建立真实桌面捕获验收并完成里程碑 | 未开始 | — | — |
 
 ## Task 1 实施记录
@@ -291,6 +291,58 @@ pwsh.exe -NoProfile -File .superpowers/sdd/2026-09-03-milestone-1-windows-graphi
 - 自审：变更仅限简报列出的 platform、测试、两个 CMakeLists 与本进度文档；没有接入 `main()`、
   捕获或 UI，未新增第三方依赖。测试 expected 使用手写矩形、LUID、target ID 与 UTF-8 字节串；
   fake 仅提供完整数据，不断言 mock/fake 自身。
-- 控制器独立审查待执行，不能预写为通过。未闭合验收：尚未在真实多显示器、负坐标、混合 DPI、
+- 控制器台账已确认 Task 5（`13fd16a..4348900`）独立审查 Clean。未闭合验收：尚未在真实多显示器、负坐标、混合 DPI、
   HDR 开启/关闭和热插拔变化环境中人工验证目录刷新；`WM_DISPLAYCHANGE`/`WM_DEVICECHANGE` 尚未接入
   refresh；捕获、托盘和端到端真实桌面验收仍属后续任务。
+
+## Task 6 实施记录
+
+新增 `D3d11DeviceFactory`、`D3d11DeviceManager` 与 `TextureCopy`。factory 只请求 D3D feature
+level 11.1/11.0，创建 flags 始终包含 BGRA support；Debug 构建缺少 Graphics Tools 时只对
+`DXGI_ERROR_SDK_COMPONENT_MISSING` 去掉 debug flag 后重试。manager 每次 initialize/rebuild 都按
+Hardware→WARP 尝试，在同一 mutex 临界区一次性发布 device bundle 与 generation；所有 immediate
+context 操作也经过该 mutex 串行。复制操作拒绝跨设备纹理，将 owned 资源归一为 DEFAULT usage、
+零 CPU access/零 misc flags；readback 使用 STAGING、零 bind、CPU read，并逐行按实际 row pitch
+复制到受控 buffer。
+
+### RED 与 TDD 限制
+
+恢复开始时，设备降级、纹理复制及多数测试已经是未提交实现，前任没有留下可核验的原始 RED
+日志，因此不把这些既有行为追记为本轮 test-first。接手后已有一项先于生产改动加入的快照一致性
+测试；通过指定 PowerShell 7 包装器构建 graphics 目标，生产库先成功，测试随后在
+`D3d11DeviceManagerTests.cpp` 以 C2039 明确报告 `D3dDeviceBundle` 缺少 `generation`。受限环境首次
+运行的 MSBuild FileTracker `E_ACCESSDENIED` 仅为环境错误，不计为 RED。随后最小增加 bundle
+generation，并在 manager 发布锁内同时赋值/替换/递增；同一目标重新构建成功。测试诊断只增加
+安全元数据输出，不改变生产行为或断言。
+
+### GREEN、真实设备与回归
+
+```powershell
+pwsh.exe -NoProfile -File .superpowers/sdd/2026-09-03-milestone-1-windows-graphics-foundation/Invoke-CleanBuildTool.ps1 cmake --build --preset windows-msvc-debug --target landscapecutter_graphics_tests
+pwsh.exe -NoProfile -File .superpowers/sdd/2026-09-03-milestone-1-windows-graphics-foundation/Invoke-CleanBuildTool.ps1 ctest --preset windows-msvc-debug -R "device manager|WARP|texture" --output-on-failure
+```
+
+结果：graphics 目标构建成功；简报定向正则 `8/8` 通过。真实 manager 详细运行输出
+`driver=Hardware`、feature level `11.1`、generation `1`、BGRA flag `1`，证明本开发机优先选择
+Hardware。真实 WARP `copyOwned` 在释放源纹理后完成 readback：BGRA8 为 `2x2`、format `87`、
+rowPitch `8`；RGBA16F 为 `2x2`、format `10`、rowPitch `16`；两项均通过，未输出任何像素字节。
+
+```powershell
+pwsh.exe -NoProfile -File .superpowers/sdd/2026-09-03-milestone-1-windows-graphics-foundation/Invoke-CleanBuildTool.ps1 cmake --build --preset windows-msvc-debug
+pwsh.exe -NoProfile -File .superpowers/sdd/2026-09-03-milestone-1-windows-graphics-foundation/Invoke-CleanBuildTool.ps1 ctest --preset windows-msvc-debug --output-on-failure
+```
+
+结果：全量构建成功；完整 CTest 一次运行 `39/39` 通过，总耗时 `104.32` 秒。
+
+## Task 6 自审与未闭合验收
+
+- 自审：变更仅限 Task 6 简报列出的 graphics、测试、两个 CMakeLists 与本进度文档；系统链接为
+  `d3d11`、`dxgi`、`dxguid`、`windowsapp`，未新增第三方依赖。device+generation 同锁发布，
+  immediate context 同锁串行；跨设备纹理、未初始化 manager、双 driver 失败、debug layer 缺失和
+  owned/readback resource flags 均有检查或测试覆盖。错误结构只含 code 与 HRESULT；日志/测试输出
+  不含截图像素或用户内容。
+- 原始未提交实现缺少可核验的整体 RED，这是保留的 TDD 顾虑；本轮 generation 缺陷具有真实
+  RED→GREEN 记录。控制器独立审查仍待执行，不能预写为通过。
+- 未闭合验收：WGC 单帧捕获、2000 ms 超时、设备丢失后每请求最多恢复一次、捕获状态协调、托盘/
+  F1/单实例 composition root 及真实多显示器/混合 DPI/HDR 端到端验收均属于 Task 7–10，本任务
+  没有实现或声明这些项目通过。

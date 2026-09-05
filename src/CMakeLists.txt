@@ -1,6 +1,12 @@
 add_library(landscapecutter_app_core STATIC
     app/AppController.cpp
     app/LaunchOptions.cpp
+    graphics/d3d11/D3d11DeviceFactory.cpp
+    graphics/d3d11/D3d11DeviceFactory.hpp
+    graphics/d3d11/D3d11DeviceManager.cpp
+    graphics/d3d11/D3d11DeviceManager.hpp
+    graphics/d3d11/TextureCopy.cpp
+    graphics/d3d11/TextureCopy.hpp
     platform/MonitorTypes.cpp
     platform/windows/DisplayCatalog.cpp
     platform/windows/DisplayCatalog.hpp
@@ -27,8 +33,12 @@ target_link_libraries(landscapecutter_app_core PUBLIC
     Qt6::Widgets
     spdlog::spdlog
     WIL::WIL
+    d3d11
+    dxgi
+    dxguid
     shcore
     user32
+    windowsapp
 )
 
 target_compile_definitions(landscapecutter_app_core PUBLIC

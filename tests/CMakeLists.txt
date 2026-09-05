@@ -91,6 +91,20 @@ lc_enable_warnings(landscapecutter_single_instance_tests)
 
 catch_discover_tests(landscapecutter_single_instance_tests)
 
+add_executable(landscapecutter_graphics_tests
+    graphics/d3d11/D3d11DeviceManagerTests.cpp
+    graphics/d3d11/TextureCopyTests.cpp
+)
+
+target_link_libraries(landscapecutter_graphics_tests PRIVATE
+    Catch2::Catch2WithMain
+    landscapecutter_app_core
+)
+
+lc_enable_warnings(landscapecutter_graphics_tests)
+
+catch_discover_tests(landscapecutter_graphics_tests)
+
 add_test(NAME app_process_smoke COMMAND LandscapeCutter --smoke-test)
 set_tests_properties(app_process_smoke PROPERTIES TIMEOUT 10)
 
