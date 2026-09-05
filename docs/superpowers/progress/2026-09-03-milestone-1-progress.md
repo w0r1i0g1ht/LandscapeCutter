@@ -15,7 +15,7 @@
 | Task 3：建立原生消息窗口与全局快捷键服务 | 已完成 | `ed04ed9` | 独立审查（`0490086`）：Clean |
 | Task 4：实现可通知现有进程的单实例协议 | 已完成 | `7816279` | 独立审查（`13fd16a`）：Clean |
 | Task 5：建立可刷新且可测试的显示器目录 | 已完成 | `203dd12` | 控制器台账确认 `13fd16a..4348900` 独立审查：Clean |
-| Task 6：建立 D3D11 设备、WARP 降级与自有纹理 | 已实现；任务审查待控制器执行 | 待首次提交后回填 | 自动验证和真实 Hardware/WARP 验收完成；不预写审查通过 |
+| Task 6：建立 D3D11 设备、WARP 降级与自有纹理 | 已实现；任务审查待控制器执行 | `02da1ba` | 自动验证和真实 Hardware/WARP 验收完成；不预写审查通过 |
 | Task 7：实现 WGC 显示器单帧捕获服务 | 未开始 | — | — |
 | Task 8：实现捕获业务状态与设备恢复 | 未开始 | — | — |
 | Task 9：接入托盘、F1、显示器刷新与单实例启动 | 未开始 | — | — |
@@ -336,6 +336,7 @@ pwsh.exe -NoProfile -File .superpowers/sdd/2026-09-03-milestone-1-windows-graphi
 
 ## Task 6 自审与未闭合验收
 
+- 实现提交：`02da1ba`（`feat: add shared D3D11 graphics device`）。
 - 自审：变更仅限 Task 6 简报列出的 graphics、测试、两个 CMakeLists 与本进度文档；系统链接为
   `d3d11`、`dxgi`、`dxguid`、`windowsapp`，未新增第三方依赖。device+generation 同锁发布，
   immediate context 同锁串行；跨设备纹理、未初始化 manager、双 driver 失败、debug layer 缺失和
