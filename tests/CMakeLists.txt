@@ -105,6 +105,17 @@ lc_enable_warnings(landscapecutter_graphics_tests)
 
 catch_discover_tests(landscapecutter_graphics_tests)
 
+add_executable(landscapecutter_capture_tests
+    capture/windows/OneShotCaptureStateTests.cpp
+    capture/windows/GraphicsCaptureInteropTests.cpp
+)
+target_link_libraries(landscapecutter_capture_tests PRIVATE
+    Catch2::Catch2
+    landscapecutter_app_core
+)
+lc_enable_warnings(landscapecutter_capture_tests)
+catch_discover_tests(landscapecutter_capture_tests)
+
 add_test(NAME app_process_smoke COMMAND LandscapeCutter --smoke-test)
 set_tests_properties(app_process_smoke PROPERTIES TIMEOUT 10)
 

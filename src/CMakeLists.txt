@@ -1,6 +1,14 @@
 add_library(landscapecutter_app_core STATIC
     app/AppController.cpp
     app/LaunchOptions.cpp
+    capture/CaptureFrame.hpp
+    capture/CaptureResult.hpp
+    capture/MonitorCaptureService.hpp
+    capture/windows/GraphicsCaptureInterop.cpp
+    capture/windows/GraphicsCaptureInterop.hpp
+    capture/windows/MonitorCaptureService.cpp
+    capture/windows/MonitorCaptureService.hpp
+    capture/windows/OneShotCaptureState.hpp
     graphics/d3d11/D3d11DeviceFactory.cpp
     graphics/d3d11/D3d11DeviceFactory.hpp
     graphics/d3d11/D3d11DeviceManager.cpp

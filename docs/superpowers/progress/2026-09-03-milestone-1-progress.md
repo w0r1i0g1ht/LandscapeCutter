@@ -4,7 +4,7 @@
 - 规格：[里程碑 1：Windows 图形基础详细设计](../specs/2026-09-03-milestone-1-windows-graphics-foundation-design.md)
 - 执行分支：`codex/milestone-1-windows-graphics-foundation`
 - 工作树：`D:\Projects\LandscapeCutter\.worktrees\milestone-1-windows-graphics-foundation`
-- 当前任务：Tasks 1–5 已完成并通过独立审查；Task 6 已完成恢复实现与自动验证，控制器独立审查待执行；里程碑 1 尚未完成。
+- 当前任务：Tasks 1–6 已完成并通过独立审查；Task 7 正按 RED→GREEN 实现；里程碑 1 尚未完成。
 
 ## 任务状态
 
@@ -15,8 +15,8 @@
 | Task 3：建立原生消息窗口与全局快捷键服务 | 已完成 | `ed04ed9` | 独立审查（`0490086`）：Clean |
 | Task 4：实现可通知现有进程的单实例协议 | 已完成 | `7816279` | 独立审查（`13fd16a`）：Clean |
 | Task 5：建立可刷新且可测试的显示器目录 | 已完成 | `203dd12` | 控制器台账确认 `13fd16a..4348900` 独立审查：Clean |
-| Task 6：建立 D3D11 设备、WARP 降级与自有纹理 | 已实现；任务审查待控制器执行 | `02da1ba` | 自动验证和真实 Hardware/WARP 验收完成；不预写审查通过 |
-| Task 7：实现 WGC 显示器单帧捕获服务 | 未开始 | — | — |
+| Task 6：建立 D3D11 设备、WARP 降级与自有纹理 | 已完成 | `02da1ba` / `e140aae` | 控制器已确认独立审查：Clean |
+| Task 7：实现 WGC 显示器单帧捕获服务 | 实施中 | — | 正在建立 RED 与生命周期测试 |
 | Task 8：实现捕获业务状态与设备恢复 | 未开始 | — | — |
 | Task 9：接入托盘、F1、显示器刷新与单实例启动 | 未开始 | — | — |
 | Task 10：建立真实桌面捕获验收并完成里程碑 | 未开始 | — | — |
@@ -343,7 +343,11 @@ pwsh.exe -NoProfile -File .superpowers/sdd/2026-09-03-milestone-1-windows-graphi
   owned/readback resource flags 均有检查或测试覆盖。错误结构只含 code 与 HRESULT；日志/测试输出
   不含截图像素或用户内容。
 - 原始未提交实现缺少可核验的整体 RED，这是保留的 TDD 顾虑；本轮 generation 缺陷具有真实
-  RED→GREEN 记录。控制器独立审查仍待执行，不能预写为通过。
+  RED→GREEN 记录。控制器已确认 `e140aae` 独立审查为 Clean。
 - 未闭合验收：WGC 单帧捕获、2000 ms 超时、设备丢失后每请求最多恢复一次、捕获状态协调、托盘/
   F1/单实例 composition root 及真实多显示器/混合 DPI/HDR 端到端验收均属于 Task 7–10，本任务
   没有实现或声明这些项目通过。
+
+## Task 7 续作验证（2026-09-06）
+
+WGC 实现已恢复。全量 Debug 构建成功；完整 CTest **59/59** 通过（88.83 秒），包含 20 项捕获服务、状态与 interop 测试。独立审查进行中。测试命令沿用上述 PowerShell7 构建包装器；MSBuild 沙箱访问拒绝经同一命令提升执行解决。真实桌面捕获及托盘集成尚未验收。
