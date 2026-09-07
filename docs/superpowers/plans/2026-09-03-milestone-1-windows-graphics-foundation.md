@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**目标：** 建立可复用的 Windows 图形基础，使全局 `F1` 或托盘菜单能够捕获鼠标所在显示器
+**目标：** 建立可复用的 Windows 图形基础，使全局 `F2` 或托盘菜单能够捕获鼠标所在显示器
 的一张 WGC/D3D11 GPU 帧，并报告正确的物理像素尺寸。
 
 **架构：** `platform/windows` 管理 DPI、显示器、热键、原生消息与单实例，
@@ -288,7 +288,7 @@ git commit -m "feat: enforce Per-Monitor V2 awareness"
 - 输入：Qt 主线程、Windows 消息、`HotkeyBinding`。
 - 输出：类型化的 `hotkeyMessage(int)`、`displayConfigurationChanged()` 和
   `GlobalHotkeyService::activated()` Qt 信号。
-- 正式快捷键固定为 ID `0x4C43`、`MOD_NOREPEAT`、`VK_F1`；测试使用 `VK_F24`。
+- 正式快捷键固定为 ID `0x4C43`、`MOD_NOREPEAT`、`VK_F2`；测试使用 `VK_F24`。
 
 - [ ] **Step 1: 写不可见窗口与消息转发 RED 测试**
 
@@ -996,7 +996,7 @@ git commit -m "feat: coordinate one-shot monitor capture"
 
 ---
 
-### Task 9: 接入托盘、F1、显示器刷新与单实例启动
+### Task 9: 接入托盘、F2、显示器刷新与单实例启动
 
 **文件：**
 
@@ -1044,7 +1044,7 @@ action 并触发；不添加只供测试调用的生产 accessor。文案测试�
 6. 断言第一进程退出且窗口、进程和产品命名对象消失。
 
 同一脚本再启动 `landscapecutter_hotkey_occupier.exe`，由 helper 在自己的隐藏窗口上占用
-`F1` 并用唯一命名 event 通知已就绪。随后启动产品，断言产品在 3 秒后仍运行；
+`F2` 并用唯一命名 event 通知已就绪。随后启动产品，断言产品在 3 秒后仍运行；
 `AppController` 单元测试同时断言 conflict 状态下菜单捕获项仍可用。脚本必须通过
 stop event 让 helper 正常退出，不得用它占用或关闭用户进程。
 
@@ -1094,12 +1094,12 @@ winrt::init_apartment(single_threaded)
 → WindowsDisplayTopologySource + DisplayCatalog::refresh
 → WindowsD3d11DeviceFactory + D3d11DeviceManager::initialize
 → TextureCopy + MonitorCaptureService + CaptureCoordinator
-→ GlobalHotkeyService 注册 {0x4C43, MOD_NOREPEAT, VK_F1}
+→ GlobalHotkeyService 注册 {0x4C43, MOD_NOREPEAT, VK_F2}
 → Qt signal 连接
 → application.exec
 ```
 
-捕获能力不可用时 `setCaptureEnabled(false)` 且不注册 `F1`。只有热键 conflict 时保持菜单
+捕获能力不可用时 `setCaptureEnabled(false)` 且不注册 `F2`。只有热键 conflict 时保持菜单
 enabled 并通知。Hardware 失败但 WARP 成功时通知兼容模式。显示器变化信号以 100 ms
 single-shot `QTimer` 防抖刷新目录；刷新失败时禁用捕获，成功后恢复。
 
@@ -1115,7 +1115,7 @@ ctest --preset windows-msvc-debug --output-on-failure
 git diff --check
 ```
 
-进度文档记录单实例、菜单、F1 注册状态和非交互回归结果，然后提交：
+进度文档记录单实例、菜单、F2 注册状态和非交互回归结果，然后提交：
 
 ```powershell
 git add src/main.cpp src/app src/CMakeLists.txt tests/app tests/scripts `
@@ -1242,10 +1242,10 @@ ctest --preset windows-msvc-debug-desktop --output-on-failure
 在 `WinSta0\Default` 正式启动产品并逐项确认：
 
 ```text
-[ ] 鼠标放到每个已连接显示器，F1 通知的显示器与物理尺寸正确
+[ ] 鼠标放到每个已连接显示器，F2 通知的显示器与物理尺寸正确
 [ ] 托盘“捕获当前显示器单帧”进入同一流程
-[ ] 快速重复 F1 时只有一个活动请求，应用保持响应
-[ ] 外部 helper 占用 F1 后，启动提示冲突且菜单捕获仍可用
+[ ] 快速重复 F2 时只有一个活动请求，应用保持响应
+[ ] 外部 helper 占用 F2 后，启动提示冲突且菜单捕获仍可用
 [ ] 第二次启动自行退出，现有实例显示“已在运行”
 [ ] 正常退出后无托盘残影、产品进程、原生窗口或活动捕获回调
 ```
@@ -1255,7 +1255,7 @@ ctest --preset windows-msvc-debug-desktop --output-on-failure
 
 - [ ] **Step 6: 更新 README 和最终进度**
 
-README 把里程碑 1 标为完成，说明 `F1` 当前只捕获内存单帧并通知尺寸，明确文件保存和
+README 把里程碑 1 标为完成，说明 `F2` 当前只捕获内存单帧并通知尺寸，明确文件保存和
 剪贴板属于里程碑 2；更新测试命令，不能把未具备的硬件矩阵写成已通过。
 
 进度文档填写每个任务提交、审查结果、自动测试、桌面测试、人工验收和环境未覆盖项；只有
