@@ -4,7 +4,8 @@
 - 规格：[里程碑 1：Windows 图形基础详细设计](../specs/2026-09-03-milestone-1-windows-graphics-foundation-design.md)
 - 执行分支：`codex/milestone-1-windows-graphics-foundation`
 - 工作树：`D:\Projects\LandscapeCutter\.worktrees\milestone-1-windows-graphics-foundation`
-- 当前任务：Tasks 1–6 已完成并通过独立审查；Task 7 正按 RED→GREEN 实现；里程碑 1 尚未完成。
+- 当前任务：Tasks 1–10 的自动证据已完成；Task 9 独立审查为 Clean；Task 10 真实桌面验收通过。
+  里程碑 1 仍等待用户完成 F2/托盘/通知/退出人工矩阵确认，不得提前标记完成。
 
 ## 任务状态
 
@@ -18,8 +19,8 @@
 | Task 6：建立 D3D11 设备、WARP 降级与自有纹理 | 已完成 | `02da1ba` / `e140aae` | 控制器已确认独立审查：Clean |
 | Task 7：实现 WGC 显示器单帧捕获服务 | 实施中 | — | 正在建立 RED 与生命周期测试 |
 | Task 8：实现捕获业务状态与设备恢复 | 未开始 | — | — |
-| Task 9：接入托盘、F2、显示器刷新与单实例启动 | 待独立审查 | 待提交 | 托盘/进程回归通过；desktop 验收仍由 Task 10 负责 |
-| Task 10：建立真实桌面捕获验收并完成里程碑 | 未开始 | — | — |
+| Task 9：接入托盘、F2、显示器刷新与单实例启动 | 已完成 | `68e7e86` / `f078bed` / `f43aeae` | 独立审查：Clean；Task 10 完成自动和真实桌面证据 |
+| Task 10：建立真实桌面捕获验收 | 自动与真实桌面验收通过；人工待确认 | `118a02b` | 默认 90/90、desktop 2/2；单显示器 SDR 环境，缺多屏/混合 DPI/HDR；里程碑未完成 |
 
 ## Task 1 实施记录
 
@@ -413,3 +414,27 @@ RED：先只增加纯 `CaptureRuntimePolicy` 的四项契约测试及 CMake 注�
 初始和防抖 refresh 路径均调用该策略；删除未使用 TextureCopy，并使 helper 的 Register/Unregister 同用
 `{0x4C43, MOD_NOREPEAT, VK_F2}`。策略 + Task 9 focused CTest **11/11**，非 desktop CTest **90/90**，
 `git diff --check` 均通过。Task 10 的 preset、desktop CMake hunk 与 integration 草稿未暂存；待独立复审。
+
+## Task 10 自动与真实桌面证据（2026-09-07）
+
+已同步控制器台账：Task 9 独立审查为 Clean。本 Task 的 desktop fixture 用完整非空
+`DisplayCatalog`、2000ms 单次请求和 2500ms 外层 `QEventLoop` 限时逐屏捕获；超时先 `cancel()`，
+completion 只移动接收 `CaptureFrame`，服务关闭 WGC session 后才进行受控 readback。测试只输出显示器
+数量、物理尺寸、DPI、SDR/HDR 与完成耗时，既不保存也不输出像素。
+
+安全解析工作树内 `out/build/windows-msvc-debug` 后删除该精确子目录，以
+`D:/Projects/LandscapeCutter/.tools/vcpkg/scripts/buildsystems/vcpkg.cmake` 重新 configure。全量
+build 成功；默认 `ctest --preset windows-msvc-debug --output-on-failure` **90/90** 通过，desktop
+`ctest --preset windows-msvc-debug-desktop --output-on-failure` **2/2** 通过（0.58 秒）。本轮实际
+桌面为 1 台显示器，物理 `3200x2000`，DPI `192x192`，HDR `false`（SDR/BGRA8）；两项 desktop
+测试的触发至自有帧完成耗时为 `131ms`、`118ms`，均低于 150ms 目标。多显示器、混合 DPI、负坐标
+布局与 HDR：**环境不具备**。
+
+里程碑 0 vcpkg guard 以仓库 `scripts/bootstrap.ps1 -VerifyCheckoutOnly` 复核：exact tag
+`2026.07.29`、annotated tag object `c76c06644034521fb761a39f8f52d8e87d1103d5`、peeled commit 与
+HEAD `9e593bb18ea69cc5095e012465dcd675a822ed0d`、tracked status clean、特殊 index 位 `0`；
+`git diff --check` 通过。
+
+自动与真实桌面验收已通过；F2 通知、托盘同入口、快速重复 F2、外部 helper 冲突菜单降级、第二实例
+提示及正常退出无残影/进程/原生窗口/活动回调均为**等待用户人工验收**的矩阵项。不得据此标记整个
+里程碑完成。

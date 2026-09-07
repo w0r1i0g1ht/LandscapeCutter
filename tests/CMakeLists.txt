@@ -118,15 +118,28 @@ target_link_libraries(landscapecutter_capture_tests PRIVATE
 lc_enable_warnings(landscapecutter_capture_tests)
 catch_discover_tests(landscapecutter_capture_tests)
 
-add_test(NAME app_process_smoke COMMAND LandscapeCutter --smoke-test)
-set_tests_properties(app_process_smoke PROPERTIES TIMEOUT 10)
-
-find_program(POWERSHELL_EXECUTABLE powershell REQUIRED)
+add_executable(landscapecutter_desktop_capture_tests
+    integration/windows/DesktopCaptureIntegrationTests.cpp
+    ${CMAKE_SOURCE_DIR}/resources/windows/LandscapeCutter.rc
+)
+target_link_libraries(landscapecutter_desktop_capture_tests PRIVATE
+    Catch2::Catch2 landscapecutter_app_core runtimeobject
+)
+target_link_options(landscapecutter_desktop_capture_tests PRIVATE /MANIFEST:NO)
+lc_enable_warnings(landscapecutter_desktop_capture_tests)
+catch_discover_tests(landscapecutter_desktop_capture_tests
+    PROPERTIES LABELS desktop-integration TIMEOUT 30
+)
 
 add_executable(landscapecutter_hotkey_occupier helpers/HotkeyOccupier.cpp)
 target_link_libraries(landscapecutter_hotkey_occupier PRIVATE WIL::WIL user32)
 target_compile_definitions(landscapecutter_hotkey_occupier PRIVATE UNICODE _UNICODE NOMINMAX)
 lc_enable_warnings(landscapecutter_hotkey_occupier)
+
+add_test(NAME app_process_smoke COMMAND LandscapeCutter --smoke-test)
+set_tests_properties(app_process_smoke PROPERTIES TIMEOUT 10)
+
+find_program(POWERSHELL_EXECUTABLE powershell REQUIRED)
 
 add_test(NAME app_process_behavior COMMAND ${POWERSHELL_EXECUTABLE}
     -NoProfile -ExecutionPolicy Bypass
