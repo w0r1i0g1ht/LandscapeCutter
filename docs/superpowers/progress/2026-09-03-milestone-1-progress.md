@@ -401,3 +401,5 @@ F2 conflict、smoke 与正式双进程/helper 行为。helper 用每次唯一的
 脚本启动前若发现真实产品进程即 return 125，且仅对它创建的 Process 发送 WM_CLOSE 或作受限兜底清理，
 不会接触用户实例。非 desktop 完整回归和最终提交 SHA 将在本次独立审查前记录；真实桌面多屏/HDR
 验收仍留给 Task 10。
+
+- Task 9 实现提交：`68e7e864f32dff55c1dddb99eac0d5bef7763d24`（`feat: wire Windows capture into the tray app`）；独立审查待完成。

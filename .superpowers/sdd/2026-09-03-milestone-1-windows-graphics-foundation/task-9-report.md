@@ -59,3 +59,5 @@ F2 冲突不会禁用菜单；成功文案包含显示器名、物理尺寸与�
 ## 已知顾虑
 
 Task 10 仍负责 desktop-integration、真实多屏/混合 DPI/HDR 与人工托盘通知验收。本 Task 9 记录待独立审查。
+
+Task 9 实现提交：`68e7e864f32dff55c1dddb99eac0d5bef7763d24`
