@@ -138,6 +138,11 @@ struct MonitorCaptureService::Operation final {
 MonitorCaptureService::MonitorCaptureService(D3d11DeviceManager& manager, QObject* parent)
     : MonitorCaptureService(manager, [] { return std::make_unique<WgcMonitorFrameSource>(); }, parent) {}
 
+bool MonitorCaptureService::isSupported() noexcept {
+    try { return GraphicsCaptureSession::IsSupported(); }
+    catch (...) { return false; }
+}
+
 MonitorCaptureService::MonitorCaptureService(D3d11DeviceManager& manager,
                                            CaptureSourceFactory factory, QObject* parent)
     : QObject(parent), manager_(manager), factory_(std::move(factory)) {

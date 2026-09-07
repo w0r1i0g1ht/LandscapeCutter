@@ -18,7 +18,7 @@
 | Task 6：建立 D3D11 设备、WARP 降级与自有纹理 | 已完成 | `02da1ba` / `e140aae` | 控制器已确认独立审查：Clean |
 | Task 7：实现 WGC 显示器单帧捕获服务 | 实施中 | — | 正在建立 RED 与生命周期测试 |
 | Task 8：实现捕获业务状态与设备恢复 | 未开始 | — | — |
-| Task 9：接入托盘、F1、显示器刷新与单实例启动 | 未开始 | — | — |
+| Task 9：接入托盘、F2、显示器刷新与单实例启动 | 待独立审查 | 待提交 | 托盘/进程回归通过；desktop 验收仍由 Task 10 负责 |
 | Task 10：建立真实桌面捕获验收并完成里程碑 | 未开始 | — | — |
 
 ## Task 1 实施记录
@@ -137,8 +137,8 @@ pwsh.exe -NoProfile -File .superpowers/sdd/2026-09-03-milestone-1-windows-graphi
 新增 `GlobalHotkeyService`，接收调用方给出的 `HotkeyBinding` 并使用 `RegisterHotKey`。
 重复注册先释放旧 binding；`ERROR_HOTKEY_ALREADY_REGISTERED` 映射为 `Conflict`，其他失败映射
 为 `Failed`，析构会注销已注册的热键。服务只将当前 binding ID 的原生热键消息发为
-`activated()`。本任务没有注册产品 `F1`、没有创建用户可见窗口，也没有接入捕获流程；Task 9
-将以 `{0x4C43, MOD_NOREPEAT, VK_F1}` 作为产品 binding 完成 composition root 接入。
+`activated()`。本任务没有注册产品 `F2`、没有创建用户可见窗口，也没有接入捕获流程；Task 9
+将以 `{0x4C43, MOD_NOREPEAT, VK_F2}` 作为产品 binding 完成 composition root 接入。
 
 独立目标 `landscapecutter_platform_message_tests` 用自定义 Catch2 main 创建一个
 `QCoreApplication`。它对真实 HWND 使用 `PostMessageW`，不创建任何用户可见 Qt 或 Win32 窗口。
@@ -169,7 +169,7 @@ pwsh.exe -NoProfile -File .superpowers/sdd/2026-09-03-milestone-1-windows-graphi
 
 结果：目标构建成功，定向 CTest `4/4` 通过。原生窗口测试验证有效但不可见的顶层工具窗口、
 热键 ID 转发及显示/设备变化广播；热键测试用 `VK_F24` 验证首次注册、重注册、第二窗口冲突、
-精确一次激活和注销后的重新注册，不占用产品 `F1`。
+精确一次激活和注销后的重新注册，不占用产品 `F2`。
 
 ```powershell
 pwsh.exe -NoProfile -File .superpowers/sdd/2026-09-03-milestone-1-windows-graphics-foundation/Invoke-CleanBuildTool.ps1 cmake --build --preset windows-msvc-debug
@@ -185,7 +185,7 @@ pwsh.exe -NoProfile -File .superpowers/sdd/2026-09-03-milestone-1-windows-graphi
   或显示调用；测试仅使用 `VK_F24`。
 - 实现提交：`ed04ed9`（`feat: add native messages and global hotkeys`）。独立审查记录提交
   `0490086`，结论为 Clean。
-- 未闭合验收：产品 `{0x4C43, MOD_NOREPEAT, VK_F1}` 尚未在 Task 9 composition root 注册；
+- 未闭合验收：产品 `{0x4C43, MOD_NOREPEAT, VK_F2}` 尚未在 Task 9 composition root 注册；
   尚未完成真实桌面捕获、多显示器/混合 DPI、托盘与退出流程的集成/人工验收。上述项目均不因
   本任务的自动测试而视为通过。
 
@@ -345,7 +345,7 @@ pwsh.exe -NoProfile -File .superpowers/sdd/2026-09-03-milestone-1-windows-graphi
 - 原始未提交实现缺少可核验的整体 RED，这是保留的 TDD 顾虑；本轮 generation 缺陷具有真实
   RED→GREEN 记录。控制器已确认 `e140aae` 独立审查为 Clean。
 - 未闭合验收：WGC 单帧捕获、2000 ms 超时、设备丢失后每请求最多恢复一次、捕获状态协调、托盘/
-  F1/单实例 composition root 及真实多显示器/混合 DPI/HDR 端到端验收均属于 Task 7–10，本任务
+  F2/单实例 composition root 及真实多显示器/混合 DPI/HDR 端到端验收均属于 Task 7–10，本任务
   没有实现或声明这些项目通过。
 
 ## Task 7 续作验证（2026-09-06）
@@ -378,3 +378,26 @@ RED：新增 display 与 device generation 同时变化、completion 为 `Device
 ### Task 8: fix round 3/5（待复审，2026-09-07）
 
 RED：分别增加 `DeviceLost` 同时遇 catalog generation 变化与 selector null 的测试，保持 recovery/latest frame generation 均为 3；定向 CTest `0/2`，两项均因旧帧残留失败。GREEN：身份校验后通过一次 `get_if<CaptureError>` 提前识别 DeviceLost 并清除最近帧，后续复用同一 error；保留 current-device invariant、DisplayChanged/DisplayUnavailable 通知优先级和不 rebuild 语义。unit build 成功，新回归 `2/2`，Task 8 定向正则 `24/24` 通过。自审：任何 display 早退都不能跳过 DeviceLost 的帧释放；未改动 Task 9/10 草稿。待复审并待真实桌面验收。
+
+## Task 9 实施记录（2026-09-07，待独立审查）
+
+已同步控制器结论：Task 8 在 `1d3bf7d` 独立复审 Clean。Task 9 将唯一 composition root 接入单实例、
+托盘、原生消息窗口、物理鼠标坐标的显示器选择、D3D/WGC/capture coordinator 和 F2；次实例在 Qt、
+托盘及图形对象之前仅 signal primary 并返回 0。托盘菜单在退出前提供稳定对象名
+`captureCurrentMonitorAction` 的捕获项；WGC、目录或设备不可用时禁用并不注册 F2，F2 冲突时菜单
+保留可用并通知。显示变化以 100ms single-shot timer 防抖刷新，退出 `aboutToQuit` 先关闭 coordinator
+再注销热键。产品 binding 为 `{0x4C43, MOD_NOREPEAT, VK_F2}`；平台隔离测试仍使用 VK_F24。
+
+### RED、GREEN 与回归
+
+初始 RED 使用仓库 PowerShell 包装器完整构建：`AppControllerTests.cpp` 因 `setCaptureEnabled`、
+`captureRequested`、`formatCaptureNotice` 与 `showHotkeyConflict` 尚未声明而 C2039/C2065 失败；这证明
+失败来自缺失 Task 9 托盘契约。随后定向 CTest 的 `app_process_behavior` 在现有草稿下以
+“Test product failed graceful shutdown.”失败，证明 WM_CLOSE 没有完成产品的优雅退出。受限环境的
+MSBuild FileTracker `E_ACCESSDENIED` 只作为环境限制记录，未当作 RED。
+
+F2 更新后，完整构建成功；定向 CTest `7/7` 通过，覆盖托盘顺序、可用性、action signal、成功通知、
+F2 conflict、smoke 与正式双进程/helper 行为。helper 用每次唯一的 ready/stop event 与隐藏窗口占用 F2；
+脚本启动前若发现真实产品进程即 return 125，且仅对它创建的 Process 发送 WM_CLOSE 或作受限兜底清理，
+不会接触用户实例。非 desktop 完整回归和最终提交 SHA 将在本次独立审查前记录；真实桌面多屏/HDR
+验收仍留给 Task 10。

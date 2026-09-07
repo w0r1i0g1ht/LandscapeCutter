@@ -44,6 +44,7 @@ using CaptureSourceFactory = std::function<std::unique_ptr<IMonitorFrameSource>(
 
 class MonitorCaptureService final : public QObject, public IMonitorCaptureService {
 public:
+    static bool isSupported() noexcept;
     explicit MonitorCaptureService(graphics::d3d11::D3d11DeviceManager& manager,
                                    QObject* parent = nullptr);
     MonitorCaptureService(graphics::d3d11::D3d11DeviceManager& manager,

@@ -122,6 +122,19 @@ set_tests_properties(app_process_smoke PROPERTIES TIMEOUT 10)
 
 find_program(POWERSHELL_EXECUTABLE powershell REQUIRED)
 
+add_executable(landscapecutter_hotkey_occupier helpers/HotkeyOccupier.cpp)
+target_link_libraries(landscapecutter_hotkey_occupier PRIVATE WIL::WIL user32)
+target_compile_definitions(landscapecutter_hotkey_occupier PRIVATE UNICODE _UNICODE NOMINMAX)
+lc_enable_warnings(landscapecutter_hotkey_occupier)
+
+add_test(NAME app_process_behavior COMMAND ${POWERSHELL_EXECUTABLE}
+    -NoProfile -ExecutionPolicy Bypass
+    -File ${CMAKE_CURRENT_SOURCE_DIR}/scripts/AppProcessBehaviorTests.ps1
+    -Application $<TARGET_FILE:LandscapeCutter>
+    -HotkeyOccupier $<TARGET_FILE:landscapecutter_hotkey_occupier>
+)
+set_tests_properties(app_process_behavior PROPERTIES TIMEOUT 60 SKIP_RETURN_CODE 125 RUN_SERIAL TRUE)
+
 add_test(NAME bootstrap_identity_behavior
     COMMAND ${POWERSHELL_EXECUTABLE}
         -NoProfile
