@@ -132,6 +132,27 @@ TEST_CASE("a successful capture replaces the latest frame and reports its output
     CHECK(fixture.notices.front().pixelFormat == CapturePixelFormat::Bgra8Unorm);
 }
 
+TEST_CASE("a later success replaces the complete latest frame") {
+    Fixture fixture;
+    fixture.coordinator.requestCapture();
+    fixture.capture.complete(0, frame(monitor()));
+
+    auto replacement = frame(monitor());
+    replacement.size = {1280, 720};
+    replacement.pixelFormat = CapturePixelFormat::Rgba16Float;
+    fixture.coordinator.requestCapture();
+    fixture.capture.complete(1, std::move(replacement));
+
+    REQUIRE(fixture.coordinator.latestFrame().has_value());
+    CHECK(fixture.coordinator.latestFrame()->size.width == 1280);
+    CHECK(fixture.coordinator.latestFrame()->size.height == 720);
+    CHECK(fixture.coordinator.latestFrame()->pixelFormat == CapturePixelFormat::Rgba16Float);
+    REQUIRE(fixture.notices.size() == 2);
+    CHECK(fixture.notices.back().code == CaptureNoticeCode::Success);
+    CHECK(fixture.notices.back().size->width == 1280);
+    CHECK(fixture.notices.back().pixelFormat == CapturePixelFormat::Rgba16Float);
+}
+
 TEST_CASE("a failed capture preserves the most recent valid frame") {
     Fixture fixture;
     fixture.coordinator.requestCapture();
@@ -156,6 +177,24 @@ TEST_CASE("a changed current catalog generation rejects a result that echoes the
     fixture.capture.complete(1, frame(monitor()));
     CHECK(fixture.coordinator.latestFrame()->displayGeneration == 7);
     CHECK(fixture.notices.back().code == CaptureNoticeCode::DisplayChanged);
+}
+
+TEST_CASE("a result with a stale display generation preserves the latest frame") {
+    Fixture fixture;
+    fixture.coordinator.requestCapture();
+    fixture.capture.complete(0, frame(monitor()));
+
+    auto staleDisplay = frame(monitor());
+    staleDisplay.displayGeneration = 6;
+    fixture.coordinator.requestCapture();
+    fixture.capture.complete(1, std::move(staleDisplay));
+
+    REQUIRE(fixture.coordinator.latestFrame().has_value());
+    CHECK(fixture.coordinator.latestFrame()->displayGeneration == 7);
+    CHECK(fixture.coordinator.state() == CaptureState::Idle);
+    REQUIRE(fixture.notices.size() == 2);
+    CHECK(fixture.notices.back().code == CaptureNoticeCode::DisplayChanged);
+    CHECK(fixture.availability.empty());
 }
 
 TEST_CASE("an unavailable current catalog rejects an error before device recovery") {
@@ -184,6 +223,23 @@ TEST_CASE("a stale device generation does not replace the current frame") {
     CHECK(fixture.coordinator.latestFrame()->deviceGeneration == 3);
     CHECK(fixture.notices.back().code == CaptureNoticeCode::DeviceUnavailable);
     CHECK(fixture.coordinator.state() == CaptureState::Idle);
+}
+
+TEST_CASE("a current device generation drift releases the latest frame") {
+    Fixture fixture;
+    fixture.coordinator.requestCapture();
+    fixture.capture.complete(0, frame(monitor()));
+
+    fixture.coordinator.requestCapture();
+    fixture.recovery.deviceGeneration = 4;
+    fixture.capture.complete(1, frame(monitor()));
+
+    CHECK_FALSE(fixture.coordinator.latestFrame().has_value());
+    CHECK(fixture.coordinator.state() == CaptureState::Idle);
+    REQUIRE(fixture.notices.size() == 2);
+    CHECK(fixture.notices.back().code == CaptureNoticeCode::DeviceUnavailable);
+    REQUIRE(fixture.availability.size() == 1);
+    CHECK(fixture.availability.back() == CaptureAvailability::DeviceUnavailable);
 }
 
 TEST_CASE("one device loss rebuilds once, clears the old frame, and retries the selected monitor") {

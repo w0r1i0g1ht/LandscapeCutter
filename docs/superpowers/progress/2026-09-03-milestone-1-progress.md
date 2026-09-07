@@ -366,3 +366,7 @@ RED：先仅注册 `CaptureCoordinatorTests.cpp`，定向 unit build 在提升�
 - `git diff --check`：通过。暂存前逐项确认仅含 Task 8 的 coordinator 源/测试、两处 CMake 注册和本进度记录；`tests/CMakeLists.txt` 仅暂存 `CaptureCoordinatorTests.cpp` 单行。
 - 自审：重试使用原始 monitor descriptor，不重新按鼠标选择；所有 completion 先验证 shutdown、请求/attempt、catalog 与 device generation；availability 信号先于 notice；析构后的 retained completion 不解引用 coordinator。
 - 未闭合验收：真实桌面、多显示器/混合 DPI/HDR 的 WGC 捕获，以及 Task 9 composition root/进程关闭行为仍待后续集成；它们不能由本任务 fake-service 单元测试替代。
+
+### Fix round 1（2026-09-07）
+
+新增连续成功完整替换、返回帧 display generation 过期、以及请求期间 current device generation 漂移三项独立测试。RED 定向 CTest 为 `2/3` 通过，`a current device generation drift releases the latest frame` 明确失败：旧 generation 3 最近帧仍存在。修复后 coordinator 只读取一次当前 device generation，在漂移时释放不属于当前 generation 的最近帧；确认 `DeviceLost` 时直接释放最近帧。GREEN 定向 CTest **7/7** 通过，完整 CTest 中 18 项 Task 8 coordinator 测试均通过；已知 Task 9 `app_process_behavior` graceful-shutdown 失败仍未在本任务范围内修改。

@@ -128,7 +128,11 @@ void CaptureCoordinator::complete(std::uint64_t captureId, std::uint32_t attempt
         return;
     }
 
-    if (deviceRecovery_.generation() != active_->deviceGeneration) {
+    const auto currentDeviceGeneration = deviceRecovery_.generation();
+    if (currentDeviceGeneration != active_->deviceGeneration) {
+        if (latestFrame_ && latestFrame_->deviceGeneration != currentDeviceGeneration) {
+            latestFrame_.reset();
+        }
         finish(CaptureNoticeCode::DeviceUnavailable, CaptureAvailability::DeviceUnavailable);
         return;
     }
@@ -149,10 +153,10 @@ void CaptureCoordinator::complete(std::uint64_t captureId, std::uint32_t attempt
     }
 
     const auto error = std::get<capture::CaptureError>(result).code;
+    if (error == capture::CaptureErrorCode::DeviceLost) {
+        latestFrame_.reset();
+    }
     if (error == capture::CaptureErrorCode::DeviceLost && active_->retryCount == 0) {
-        if (latestFrame_ && latestFrame_->deviceGeneration == active_->deviceGeneration) {
-            latestFrame_.reset();
-        }
         ++active_->retryCount;
         QPointer<CaptureCoordinator> coordinator(this);
         captureService_.cancel();
