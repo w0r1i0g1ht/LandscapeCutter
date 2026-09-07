@@ -362,6 +362,7 @@ RED：先仅注册 `CaptureCoordinatorTests.cpp`，定向 unit build 在提升�
 
 ### 自审与未闭合验收
 
+- 实现提交：`f9a4784`（`feat: coordinate one-shot monitor capture`）。
 - `git diff --check`：通过。暂存前逐项确认仅含 Task 8 的 coordinator 源/测试、两处 CMake 注册和本进度记录；`tests/CMakeLists.txt` 仅暂存 `CaptureCoordinatorTests.cpp` 单行。
 - 自审：重试使用原始 monitor descriptor，不重新按鼠标选择；所有 completion 先验证 shutdown、请求/attempt、catalog 与 device generation；availability 信号先于 notice；析构后的 retained completion 不解引用 coordinator。
 - 未闭合验收：真实桌面、多显示器/混合 DPI/HDR 的 WGC 捕获，以及 Task 9 composition root/进程关闭行为仍待后续集成；它们不能由本任务 fake-service 单元测试替代。
