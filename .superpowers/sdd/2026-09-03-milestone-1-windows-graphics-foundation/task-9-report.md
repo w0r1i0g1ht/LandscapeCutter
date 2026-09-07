@@ -61,3 +61,36 @@ F2 冲突不会禁用菜单；成功文案包含显示器名、物理尺寸与�
 Task 10 仍负责 desktop-integration、真实多屏/混合 DPI/HDR 与人工托盘通知验收。本 Task 9 记录待独立审查。
 
 Task 9 实现提交：`68e7e864f32dff55c1dddb99eac0d5bef7763d24`
+
+## Fix round 1（待独立复审）
+
+### RED
+
+先增加 `CaptureRuntimePolicyTests.cpp` 与 Task 9 CMake 注册，未创建 production policy 即执行：
+
+```powershell
+C:\Users\13195\.cache\codex-runtimes\codex-primary-runtime\dependencies\native\powershell\pwsh.exe -NoProfile -File .superpowers/sdd/2026-09-03-milestone-1-windows-graphics-foundation/Invoke-CleanBuildTool.ps1 cmake --build --preset windows-msvc-debug --target landscapecutter_unit_tests
+```
+
+结果：CMake 以 `Cannot find source file: app/CaptureRuntimePolicy.hpp` 失败，明确是缺失策略接口。
+中断后的首次 GREEN 构建保留了该不完整生成状态并报旧库 LNK2019；重新配置后才作为环境/生成恢复处理，
+不计为新的行为 RED。
+
+### GREEN、改动与自审
+
+新增纯 `CaptureRuntimePolicy`，由 `main()` 的初始能力判定与 100ms refresh callback 共同调用：仅
+`Available`/`DisplayUnavailable` 可以因显示器 refresh 改变；`Unsupported` 与
+`DeviceUnavailable` 在任意显示事件后保持禁用。refresh 的 hotkey 结果按 Registered/Conflict/Failed
+三分流，只有 Conflict 提示 F2 且保留菜单；Failed 进入不可自动恢复的 `DeviceUnavailable`。移除了
+未使用的 `TextureCopy` 局部对象和 include。helper Register/Unregister 统一使用
+`{0x4C43, MOD_NOREPEAT, VK_F2}`。
+
+```powershell
+C:\Users\13195\.cache\codex-runtimes\codex-primary-runtime\dependencies\native\powershell\pwsh.exe -NoProfile -File .superpowers/sdd/2026-09-03-milestone-1-windows-graphics-foundation/Invoke-CleanBuildTool.ps1 ctest --preset windows-msvc-debug -R "display refresh becomes|device unavailable remains|unsupported capture remains|refresh hotkey outcomes|tray menu|capture availability|capture action|structured success|F2 hotkey|app_process_behavior|app_process_smoke" --output-on-failure
+C:\Users\13195\.cache\codex-runtimes\codex-primary-runtime\dependencies\native\powershell\pwsh.exe -NoProfile -File .superpowers/sdd/2026-09-03-milestone-1-windows-graphics-foundation/Invoke-CleanBuildTool.ps1 ctest --preset windows-msvc-debug -LE desktop-integration -j 8 --quiet
+git diff --check
+```
+
+结果：策略 + 原 7 项 focused **11/11 passed**；非 desktop CTest **90/90 passed**；`git diff --check`
+通过。自审确认策略不是测试复制逻辑，main 的 initial/refresh 均直接调用；未暂存 Task 10 preset、
+desktop CMake hunk 或 integration 草稿。冲突通知单元文案覆盖为已记录 deferred minor，未扩大本轮范围。

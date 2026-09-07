@@ -1,10 +1,10 @@
 #include "app/AppController.hpp"
 #include "app/AppMetadata.hpp"
 #include "app/CaptureCoordinator.hpp"
+#include "app/CaptureRuntimePolicy.hpp"
 #include "app/LaunchOptions.hpp"
 #include "capture/windows/MonitorCaptureService.hpp"
 #include "graphics/d3d11/D3d11DeviceManager.hpp"
-#include "graphics/d3d11/TextureCopy.hpp"
 #include "platform/windows/DpiAwareness.hpp"
 #include "platform/windows/DisplayCatalog.hpp"
 #include "platform/windows/GlobalHotkeyService.hpp"
@@ -92,7 +92,6 @@ int main(int argc, char* argv[]) {
 
     lc::graphics::d3d11::D3d11DeviceManager deviceManager;
     const bool deviceReady = deviceManager.initialize();
-    [[maybe_unused]] lc::graphics::d3d11::TextureCopy textureCopy(deviceManager);
     lc::capture::windows::MonitorCaptureService captureService(deviceManager);
     lc::app::CaptureCoordinator coordinator(
         captureService, deviceManager, [&catalog] {
@@ -101,31 +100,17 @@ int main(int argc, char* argv[]) {
         });
     lc::platform::windows::GlobalHotkeyService hotkey(nativeWindow);
     const bool supported = lc::capture::windows::MonitorCaptureService::isSupported();
-    lc::app::CaptureAvailability currentAvailability = lc::app::CaptureAvailability::Available;
-    if (!supported) {
-        currentAvailability = lc::app::CaptureAvailability::Unsupported;
-    } else if (!catalogReady) {
-        currentAvailability = lc::app::CaptureAvailability::DisplayUnavailable;
-    } else if (!deviceReady) {
-        currentAvailability = lc::app::CaptureAvailability::DeviceUnavailable;
-    }
-    controller.setCaptureEnabled(currentAvailability == lc::app::CaptureAvailability::Available);
-
-    if (!supported) {
-        coordinator.setAvailability(lc::app::CaptureAvailability::Unsupported);
-    } else if (!catalogReady) {
-        coordinator.setAvailability(lc::app::CaptureAvailability::DisplayUnavailable);
-    } else if (!deviceReady) {
-        coordinator.setAvailability(lc::app::CaptureAvailability::DeviceUnavailable);
-    } else {
-        const auto hotkeyStatus = hotkey.registerBinding({0x4C43, MOD_NOREPEAT, VK_F2});
-        if (hotkeyStatus == lc::platform::windows::HotkeyRegistrationStatus::Conflict) {
-            controller.showHotkeyConflict();
-        } else if (hotkeyStatus == lc::platform::windows::HotkeyRegistrationStatus::Failed) {
-            controller.setCaptureEnabled(false);
-            currentAvailability = lc::app::CaptureAvailability::DeviceUnavailable;
-            coordinator.setAvailability(lc::app::CaptureAvailability::DeviceUnavailable);
-        }
+    auto runtimeState = lc::app::CaptureRuntimePolicy::initial(supported, catalogReady, deviceReady);
+    const auto applyRuntimeState = [&controller, &coordinator](const lc::app::CaptureRuntimeState& state) {
+        controller.setCaptureEnabled(state.captureEnabled);
+        coordinator.setAvailability(state.availability);
+    };
+    applyRuntimeState(runtimeState);
+    if (runtimeState.registerHotkey) {
+        runtimeState = lc::app::CaptureRuntimePolicy::afterHotkeyRegistration(
+            runtimeState, hotkey.registerBinding({0x4C43, MOD_NOREPEAT, VK_F2}));
+        applyRuntimeState(runtimeState);
+        if (runtimeState.showHotkeyConflict) { controller.showHotkeyConflict(); }
         const auto device = deviceManager.current();
         if (device && device->driverKind == lc::graphics::d3d11::D3dDriverKind::Warp) {
             controller.showCompatibilityMode();
@@ -139,8 +124,11 @@ int main(int argc, char* argv[]) {
     QObject::connect(&coordinator, &lc::app::CaptureCoordinator::noticeReady,
                      &controller, &lc::app::AppController::showCaptureNotice);
     QObject::connect(&coordinator, &lc::app::CaptureCoordinator::availabilityChanged,
-                     &controller, [&controller, &hotkey, &currentAvailability](const lc::app::CaptureAvailability availability) {
-                         currentAvailability = availability;
+                     &controller, [&controller, &hotkey, &runtimeState](const lc::app::CaptureAvailability availability) {
+                         runtimeState.availability = availability;
+                         runtimeState.captureEnabled = availability == lc::app::CaptureAvailability::Available;
+                         runtimeState.registerHotkey = false;
+                         runtimeState.showHotkeyConflict = false;
                          controller.setCaptureEnabled(availability == lc::app::CaptureAvailability::Available);
                          if (availability != lc::app::CaptureAvailability::Available) { hotkey.unregister(); }
                      });
@@ -154,22 +142,19 @@ int main(int argc, char* argv[]) {
                      &lc::platform::windows::NativeMessageWindow::displayConfigurationChanged,
                      &refreshTimer, [&refreshTimer] { refreshTimer.start(100); });
     QObject::connect(&refreshTimer, &QTimer::timeout, &controller,
-                     [&catalog, &controller, &coordinator, &hotkey, &currentAvailability, supported] {
+                     [&catalog, &controller, &coordinator, &hotkey, &runtimeState, &applyRuntimeState] {
                          const bool refreshed = std::holds_alternative<
                              std::vector<lc::platform::windows::MonitorDescriptor>>(catalog.refresh());
-                         const bool canRecover = currentAvailability == lc::app::CaptureAvailability::Available ||
-                                                 currentAvailability == lc::app::CaptureAvailability::DisplayUnavailable;
-                         const bool enabled = supported && canRecover && refreshed;
-                         controller.setCaptureEnabled(enabled);
-                         coordinator.setAvailability(enabled ? lc::app::CaptureAvailability::Available
-                                                            : lc::app::CaptureAvailability::DisplayUnavailable);
-                         if (enabled && !hotkey.isRegistered()) {
-                             const auto status = hotkey.registerBinding({0x4C43, MOD_NOREPEAT, VK_F2});
-                             if (status != lc::platform::windows::HotkeyRegistrationStatus::Registered) {
-                                 controller.showHotkeyConflict();
-                             }
+                         runtimeState = lc::app::CaptureRuntimePolicy::afterDisplayRefresh(runtimeState, refreshed);
+                         const bool needsHotkeyRegistration = runtimeState.registerHotkey;
+                         applyRuntimeState(runtimeState);
+                         if (needsHotkeyRegistration && !hotkey.isRegistered()) {
+                             runtimeState = lc::app::CaptureRuntimePolicy::afterHotkeyRegistration(
+                                 runtimeState, hotkey.registerBinding({0x4C43, MOD_NOREPEAT, VK_F2}));
+                             applyRuntimeState(runtimeState);
+                             if (runtimeState.showHotkeyConflict) { controller.showHotkeyConflict(); }
                          }
-                         if (!enabled) { hotkey.unregister(); }
+                         if (!runtimeState.captureEnabled) { hotkey.unregister(); }
                      });
     QObject::connect(&application, &QCoreApplication::aboutToQuit, &application,
                      [&coordinator, &hotkey] {

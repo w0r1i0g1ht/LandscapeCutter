@@ -1,5 +1,7 @@
 add_library(landscapecutter_app_core STATIC
     app/AppController.cpp
+    app/CaptureRuntimePolicy.hpp
+    app/CaptureRuntimePolicy.cpp
     app/CaptureCoordinator.cpp
     app/CaptureCoordinator.hpp
     app/LaunchOptions.cpp

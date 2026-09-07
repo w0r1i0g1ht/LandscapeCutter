@@ -403,3 +403,13 @@ F2 conflict、smoke 与正式双进程/helper 行为。helper 用每次唯一的
 验收仍留给 Task 10。
 
 - Task 9 实现提交：`68e7e864f32dff55c1dddb99eac0d5bef7763d24`（`feat: wire Windows capture into the tray app`）；独立审查待完成。
+
+### Task 9: fix round 1/5（待复审，2026-09-07）
+
+RED：先只增加纯 `CaptureRuntimePolicy` 的四项契约测试及 CMake 注册；构建以
+`Cannot find source file: app/CaptureRuntimePolicy.hpp` 失败，明确指向尚不存在的生产策略。GREEN：
+策略限制 refresh 只能在 Available/DisplayUnavailable 间恢复，Unsupported/DeviceUnavailable 跨两次
+显示事件保持禁用；Registered/Conflict/Failed 显式三分流，Failed 进入不可自动恢复状态。`main()` 的
+初始和防抖 refresh 路径均调用该策略；删除未使用 TextureCopy，并使 helper 的 Register/Unregister 同用
+`{0x4C43, MOD_NOREPEAT, VK_F2}`。策略 + Task 9 focused CTest **11/11**，非 desktop CTest **90/90**，
+`git diff --check` 均通过。Task 10 的 preset、desktop CMake hunk 与 integration 草稿未暂存；待独立复审。

@@ -10,7 +10,7 @@ int wmain(int argc, wchar_t* argv[]) {
                                  L"LandscapeCutter test hotkey holder", WS_POPUP,
                                  0, 0, 0, 0, nullptr, nullptr, GetModuleHandleW(nullptr), nullptr);
     if (!window) { return 1; }
-    if (!RegisterHotKey(window, 1, MOD_NOREPEAT, VK_F2)) {
+    if (!RegisterHotKey(window, 0x4C43, MOD_NOREPEAT, VK_F2)) {
         const auto code = GetLastError();
         DestroyWindow(window);
         return code == ERROR_HOTKEY_ALREADY_REGISTERED ? 125 : 1;
@@ -27,7 +27,7 @@ int wmain(int argc, wchar_t* argv[]) {
             DispatchMessageW(&message);
         }
     }
-    UnregisterHotKey(window, 1);
+    UnregisterHotKey(window, 0x4C43);
     DestroyWindow(window);
     return result;
 }
