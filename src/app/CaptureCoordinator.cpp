@@ -118,6 +118,11 @@ void CaptureCoordinator::complete(std::uint64_t captureId, std::uint32_t attempt
                                   capture::CaptureResult result) {
     if (shuttingDown_ || !active_ || active_->id != captureId || active_->attempt != attempt) { return; }
 
+    const auto currentDeviceGeneration = deviceRecovery_.generation();
+    if (latestFrame_ && latestFrame_->deviceGeneration != currentDeviceGeneration) {
+        latestFrame_.reset();
+    }
+
     const auto currentMonitor = monitorSelector_();
     if (!currentMonitor) {
         finish(CaptureNoticeCode::DisplayUnavailable, CaptureAvailability::DisplayUnavailable);
@@ -128,11 +133,7 @@ void CaptureCoordinator::complete(std::uint64_t captureId, std::uint32_t attempt
         return;
     }
 
-    const auto currentDeviceGeneration = deviceRecovery_.generation();
     if (currentDeviceGeneration != active_->deviceGeneration) {
-        if (latestFrame_ && latestFrame_->deviceGeneration != currentDeviceGeneration) {
-            latestFrame_.reset();
-        }
         finish(CaptureNoticeCode::DeviceUnavailable, CaptureAvailability::DeviceUnavailable);
         return;
     }

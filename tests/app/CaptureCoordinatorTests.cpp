@@ -179,6 +179,24 @@ TEST_CASE("a changed current catalog generation rejects a result that echoes the
     CHECK(fixture.notices.back().code == CaptureNoticeCode::DisplayChanged);
 }
 
+TEST_CASE("a display change still releases a stale device frame") {
+    Fixture fixture;
+    fixture.coordinator.requestCapture();
+    fixture.capture.complete(0, frame(monitor()));
+
+    fixture.coordinator.requestCapture();
+    fixture.selected = monitor("display-a", 8);
+    fixture.recovery.deviceGeneration = 4;
+    fixture.capture.complete(1, CaptureError{CaptureErrorCode::DeviceLost, {}});
+
+    CHECK_FALSE(fixture.coordinator.latestFrame().has_value());
+    CHECK(fixture.coordinator.state() == CaptureState::Idle);
+    REQUIRE(fixture.notices.size() == 2);
+    CHECK(fixture.notices.back().code == CaptureNoticeCode::DisplayChanged);
+    CHECK(fixture.availability.empty());
+    CHECK(fixture.recovery.rebuildCount == 0);
+}
+
 TEST_CASE("a result with a stale display generation preserves the latest frame") {
     Fixture fixture;
     fixture.coordinator.requestCapture();

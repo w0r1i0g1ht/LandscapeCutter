@@ -370,3 +370,7 @@ RED：先仅注册 `CaptureCoordinatorTests.cpp`，定向 unit build 在提升�
 ### Fix round 1（2026-09-07）
 
 新增连续成功完整替换、返回帧 display generation 过期、以及请求期间 current device generation 漂移三项独立测试。RED 定向 CTest 为 `2/3` 通过，`a current device generation drift releases the latest frame` 明确失败：旧 generation 3 最近帧仍存在。修复后 coordinator 只读取一次当前 device generation，在漂移时释放不属于当前 generation 的最近帧；确认 `DeviceLost` 时直接释放最近帧。GREEN 定向 CTest **7/7** 通过，完整 CTest 中 18 项 Task 8 coordinator 测试均通过；已知 Task 9 `app_process_behavior` graceful-shutdown 失败仍未在本任务范围内修改。
+
+### Task 8: fix round 2/5（待复审，2026-09-07）
+
+RED：新增 display 与 device generation 同时变化、completion 为 `DeviceLost` 的回归测试；定向 CTest `0/1`，`latestFrame()` 仍存在而失败。GREEN：在任何 display selector/catalog 早退前读取 current device generation，并先释放 generation 不匹配的最近帧；保持原有 DisplayChanged 通知优先级和不重建语义。unit build 成功，新回归 `1/1`，Task 8 定向正则 `22/22` 通过。自审：帧归属不变量现先于所有 display 检查建立；没有改动 Task 9/10 草稿。待复审并待真实桌面验收。
