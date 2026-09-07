@@ -4,8 +4,8 @@
 - 规格：[里程碑 1：Windows 图形基础详细设计](../specs/2026-09-03-milestone-1-windows-graphics-foundation-design.md)
 - 执行分支：`codex/milestone-1-windows-graphics-foundation`
 - 工作树：`D:\Projects\LandscapeCutter\.worktrees\milestone-1-windows-graphics-foundation`
-- 当前任务：Tasks 1–10 的自动证据已完成；Task 9 独立审查为 Clean；Task 10 真实桌面验收通过。
-  里程碑 1 仍等待用户完成 F2/托盘/通知/退出人工矩阵确认，不得提前标记完成。
+- 当前任务：Tasks 1–10 已完成；Task 9 独立审查为 Clean；Task 10 自动、真实桌面与人工验收均已完成。
+  里程碑 1 已完成。
 
 ## 任务状态
 
@@ -20,7 +20,7 @@
 | Task 7：实现 WGC 显示器单帧捕获服务 | 实施中 | — | 正在建立 RED 与生命周期测试 |
 | Task 8：实现捕获业务状态与设备恢复 | 未开始 | — | — |
 | Task 9：接入托盘、F2、显示器刷新与单实例启动 | 已完成 | `68e7e86` / `f078bed` / `f43aeae` | 独立审查：Clean；Task 10 完成自动和真实桌面证据 |
-| Task 10：建立真实桌面捕获验收 | 自动与真实桌面验收通过；人工待确认 | `118a02b` | 默认 90/90、desktop 2/2；单显示器 SDR 环境，缺多屏/混合 DPI/HDR；里程碑未完成 |
+| Task 10：建立真实桌面捕获验收 | 已完成 | `a333e4f` / `docs: complete milestone 1 acceptance`（待提交） | 默认 90/90、desktop 2/2；人工矩阵与控制器退出核验通过；单显示器 SDR 环境未覆盖多屏/混合 DPI/HDR |
 
 ## Task 1 实施记录
 
@@ -380,7 +380,7 @@ RED：新增 display 与 device generation 同时变化、completion 为 `Device
 
 RED：分别增加 `DeviceLost` 同时遇 catalog generation 变化与 selector null 的测试，保持 recovery/latest frame generation 均为 3；定向 CTest `0/2`，两项均因旧帧残留失败。GREEN：身份校验后通过一次 `get_if<CaptureError>` 提前识别 DeviceLost 并清除最近帧，后续复用同一 error；保留 current-device invariant、DisplayChanged/DisplayUnavailable 通知优先级和不 rebuild 语义。unit build 成功，新回归 `2/2`，Task 8 定向正则 `24/24` 通过。自审：任何 display 早退都不能跳过 DeviceLost 的帧释放；未改动 Task 9/10 草稿。待复审并待真实桌面验收。
 
-## Task 9 实施记录（2026-09-07，待独立审查）
+## Task 9 实施记录（2026-09-07，独立审查 Clean）
 
 已同步控制器结论：Task 8 在 `1d3bf7d` 独立复审 Clean。Task 9 将唯一 composition root 接入单实例、
 托盘、原生消息窗口、物理鼠标坐标的显示器选择、D3D/WGC/capture coordinator 和 F2；次实例在 Qt、
@@ -403,7 +403,7 @@ F2 conflict、smoke 与正式双进程/helper 行为。helper 用每次唯一的
 不会接触用户实例。非 desktop 完整回归和最终提交 SHA 将在本次独立审查前记录；真实桌面多屏/HDR
 验收仍留给 Task 10。
 
-- Task 9 实现提交：`68e7e864f32dff55c1dddb99eac0d5bef7763d24`（`feat: wire Windows capture into the tray app`）；独立审查待完成。
+- Task 9 实现提交：`68e7e864f32dff55c1dddb99eac0d5bef7763d24`（`feat: wire Windows capture into the tray app`）；独立审查：Clean。
 
 ### Task 9: fix round 1/5（待复审，2026-09-07）
 
@@ -413,7 +413,8 @@ RED：先只增加纯 `CaptureRuntimePolicy` 的四项契约测试及 CMake 注�
 显示事件保持禁用；Registered/Conflict/Failed 显式三分流，Failed 进入不可自动恢复状态。`main()` 的
 初始和防抖 refresh 路径均调用该策略；删除未使用 TextureCopy，并使 helper 的 Register/Unregister 同用
 `{0x4C43, MOD_NOREPEAT, VK_F2}`。策略 + Task 9 focused CTest **11/11**，非 desktop CTest **90/90**，
-`git diff --check` 均通过。Task 10 的 preset、desktop CMake hunk 与 integration 草稿未暂存；待独立复审。
+`git diff --check` 均通过。Task 10 的 preset、desktop CMake hunk 与 integration 草稿由后续 Task 10
+提交；Task 9 独立审查最终为 Clean。
 
 ## Task 10 自动与真实桌面证据（2026-09-07）
 
@@ -436,5 +437,17 @@ HEAD `9e593bb18ea69cc5095e012465dcd675a822ed0d`、tracked status clean、特殊 
 `git diff --check` 通过。
 
 自动与真实桌面验收已通过；F2 通知、托盘同入口、快速重复 F2、外部 helper 冲突菜单降级、第二实例
-提示及正常退出无残影/进程/原生窗口/活动回调均为**等待用户人工验收**的矩阵项。不得据此标记整个
-里程碑完成。
+提示及正常退出无残影/进程/原生窗口/活动回调的人工矩阵已在后续最终记录中确认。
+
+### 最终人工验收与控制器退出核验（2026-09-07）
+
+用户在当前单屏桌面确认：F2 的通知与捕获正常，内容为显示器名称、`3200x2000`、`SDR BGRA8`；
+托盘“捕获当前显示器单帧”正常；快速重复 F2 时应用保持响应且未崩溃/卡死。第二实例自动以 `0`
+退出，用户在第二次观察时确认既有实例收到“LandscapeCutter 已在运行”通知。helper 占用 F2 时，用户
+确认“F2 已被其他程序占用”通知出现，托盘捕获项仍可用且可成功捕获。用户从托盘退出后，图标立即
+消失且无灰色残影。
+
+控制器退出核验：`ProductProcessCount=0`、`HelperProcessCount=0`、`NativeWindowCount=0`、
+`ProductNamedObjectsAbsent=True`。自动证据保持 `a333e4f` 的 fresh build、默认 **90/90**、desktop
+**2/2**；单屏 `3200x2000`、`192x192 DPI`、SDR，耗时 `131ms/118ms`。多屏、混合 DPI、负坐标与
+HDR 仍为**环境未覆盖**，不影响已完成的单屏验收。里程碑 1 完成。
