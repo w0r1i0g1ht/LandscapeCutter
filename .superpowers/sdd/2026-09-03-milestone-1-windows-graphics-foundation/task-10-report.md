@@ -66,3 +66,20 @@ C:\Users\13195\.cache\codex-runtimes\codex-primary-runtime\dependencies\native\p
 
 结论：**DONE**。Task 10 与里程碑 1 验收完成；F2 仍只捕获内存单帧并通知尺寸，文件保存与剪贴板
 仍属于里程碑 2。
+
+## Fix round 1/5：文档状态一致性（2026-09-07）
+
+Important finding：进度顶部已称 Tasks 1–10 与里程碑 1 完成，但状态表仍将 Task 7 写为“实施中”、
+Task 8 写为“未开始”，并把已提交的 Task 10 docs 提交标作“待提交”，造成自相矛盾。
+
+修复：Task 7 更新为已完成，提交 `7416b6e`、独立审查 Clean；Task 8 更新为已完成，提交
+`f9a4784` / `1d3bf7d`、独立复审 Clean；Task 10 提交列更新为 `a333e4f` / `0e82f29`，移除“待提交”。
+Task 10 审查栏仅如实记录独立复审正在修复本文档一致性，未提前标记最终 Clean。
+
+```powershell
+git diff --check
+```
+
+结果：通过。自审：只修改进度状态表与本报告；没有改动代码、测试、README、CMake 或 preset，自动
+测试数维持默认 **90/90** 与 desktop **2/2**。desktop 循环缺少 `CAPTURE` 上下文为主 Agent 已 deferred
+的 Minor，本轮未修改测试。
