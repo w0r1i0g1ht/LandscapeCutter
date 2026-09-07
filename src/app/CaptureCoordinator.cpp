@@ -122,6 +122,10 @@ void CaptureCoordinator::complete(std::uint64_t captureId, std::uint32_t attempt
     if (latestFrame_ && latestFrame_->deviceGeneration != currentDeviceGeneration) {
         latestFrame_.reset();
     }
+    const auto* captureError = std::get_if<capture::CaptureError>(&result);
+    if (captureError && captureError->code == capture::CaptureErrorCode::DeviceLost) {
+        latestFrame_.reset();
+    }
 
     const auto currentMonitor = monitorSelector_();
     if (!currentMonitor) {
@@ -153,10 +157,7 @@ void CaptureCoordinator::complete(std::uint64_t captureId, std::uint32_t attempt
         return;
     }
 
-    const auto error = std::get<capture::CaptureError>(result).code;
-    if (error == capture::CaptureErrorCode::DeviceLost) {
-        latestFrame_.reset();
-    }
+    const auto error = captureError->code;
     if (error == capture::CaptureErrorCode::DeviceLost && active_->retryCount == 0) {
         ++active_->retryCount;
         QPointer<CaptureCoordinator> coordinator(this);

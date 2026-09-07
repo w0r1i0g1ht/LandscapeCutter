@@ -374,3 +374,7 @@ RED：先仅注册 `CaptureCoordinatorTests.cpp`，定向 unit build 在提升�
 ### Task 8: fix round 2/5（待复审，2026-09-07）
 
 RED：新增 display 与 device generation 同时变化、completion 为 `DeviceLost` 的回归测试；定向 CTest `0/1`，`latestFrame()` 仍存在而失败。GREEN：在任何 display selector/catalog 早退前读取 current device generation，并先释放 generation 不匹配的最近帧；保持原有 DisplayChanged 通知优先级和不重建语义。unit build 成功，新回归 `1/1`，Task 8 定向正则 `22/22` 通过。自审：帧归属不变量现先于所有 display 检查建立；没有改动 Task 9/10 草稿。待复审并待真实桌面验收。
+
+### Task 8: fix round 3/5（待复审，2026-09-07）
+
+RED：分别增加 `DeviceLost` 同时遇 catalog generation 变化与 selector null 的测试，保持 recovery/latest frame generation 均为 3；定向 CTest `0/2`，两项均因旧帧残留失败。GREEN：身份校验后通过一次 `get_if<CaptureError>` 提前识别 DeviceLost 并清除最近帧，后续复用同一 error；保留 current-device invariant、DisplayChanged/DisplayUnavailable 通知优先级和不 rebuild 语义。unit build 成功，新回归 `2/2`，Task 8 定向正则 `24/24` 通过。自审：任何 display 早退都不能跳过 DeviceLost 的帧释放；未改动 Task 9/10 草稿。待复审并待真实桌面验收。

@@ -197,6 +197,23 @@ TEST_CASE("a display change still releases a stale device frame") {
     CHECK(fixture.recovery.rebuildCount == 0);
 }
 
+TEST_CASE("a display generation change releases a device-lost latest frame") {
+    Fixture fixture;
+    fixture.coordinator.requestCapture();
+    fixture.capture.complete(0, frame(monitor()));
+
+    fixture.coordinator.requestCapture();
+    fixture.selected = monitor("display-a", 8);
+    fixture.capture.complete(1, CaptureError{CaptureErrorCode::DeviceLost, {}});
+
+    CHECK_FALSE(fixture.coordinator.latestFrame().has_value());
+    CHECK(fixture.coordinator.state() == CaptureState::Idle);
+    REQUIRE(fixture.notices.size() == 2);
+    CHECK(fixture.notices.back().code == CaptureNoticeCode::DisplayChanged);
+    CHECK(fixture.availability.empty());
+    CHECK(fixture.recovery.rebuildCount == 0);
+}
+
 TEST_CASE("a result with a stale display generation preserves the latest frame") {
     Fixture fixture;
     fixture.coordinator.requestCapture();
@@ -227,6 +244,24 @@ TEST_CASE("an unavailable current catalog rejects an error before device recover
     CHECK(fixture.notices.back().code == CaptureNoticeCode::DisplayUnavailable);
     REQUIRE(fixture.availability.size() == 1);
     CHECK(fixture.availability.back() == CaptureAvailability::DisplayUnavailable);
+}
+
+TEST_CASE("an unavailable display releases a device-lost latest frame") {
+    Fixture fixture;
+    fixture.coordinator.requestCapture();
+    fixture.capture.complete(0, frame(monitor()));
+
+    fixture.coordinator.requestCapture();
+    fixture.selected.reset();
+    fixture.capture.complete(1, CaptureError{CaptureErrorCode::DeviceLost, {}});
+
+    CHECK_FALSE(fixture.coordinator.latestFrame().has_value());
+    CHECK(fixture.coordinator.state() == CaptureState::Idle);
+    REQUIRE(fixture.notices.size() == 2);
+    CHECK(fixture.notices.back().code == CaptureNoticeCode::DisplayUnavailable);
+    REQUIRE(fixture.availability.size() == 1);
+    CHECK(fixture.availability.back() == CaptureAvailability::DisplayUnavailable);
+    CHECK(fixture.recovery.rebuildCount == 0);
 }
 
 TEST_CASE("a stale device generation does not replace the current frame") {
