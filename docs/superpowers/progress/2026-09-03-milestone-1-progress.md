@@ -350,4 +350,18 @@ pwsh.exe -NoProfile -File .superpowers/sdd/2026-09-03-milestone-1-windows-graphi
 
 ## Task 7 续作验证（2026-09-06）
 
-WGC 实现已恢复。全量 Debug 构建成功；完整 CTest **59/59** 通过（88.83 秒），包含 20 项捕获服务、状态与 interop 测试。独立审查进行中。测试命令沿用上述 PowerShell7 构建包装器；MSBuild 沙箱访问拒绝经同一命令提升执行解决。真实桌面捕获及托盘集成尚未验收。
+WGC 实现已恢复。全量 Debug 构建成功；完整 CTest **59/59** 通过（88.83 秒），包含 20 项捕获服务、状态与 interop 测试。独立审查结论为 Clean。测试命令沿用上述 PowerShell7 构建包装器；MSBuild 沙箱访问拒绝经同一命令提升执行解决。真实桌面捕获及托盘集成尚未验收。
+
+## Task 8 实施记录（2026-09-07）
+
+新增 `CaptureCoordinator`，以当前鼠标显示器发起一次性捕获；捕获中请求只报告 Busy、不排队。它保存请求的显示器与 display/device generation，成功才替换最近帧，普通失败保留最近有效帧；首次 DeviceLost 清理旧设备帧、重建并只重试同一显示器一次，第二次丢失停止。结构化通知完整映射 `CaptureErrorCode`，availability 在可重入 notice 前发布；shutdown/析构取消活动请求、释放帧，并用 `QPointer` 抑制晚到回调。
+
+### RED、GREEN 与回归
+
+RED：先仅注册 `CaptureCoordinatorTests.cpp`，定向 unit build 在提升环境以 `CaptureCoordinator` 方法和 `staticMetaObject` 缺失的 LNK2019/LNK2001 失败；受限环境的 FileTracker `E_ACCESSDENIED` 未计为 RED。随后注册生产源，`landscapecutter_unit_tests` 构建成功。简报正则加 stale-device 覆盖的定向 CTest **7/7** 通过。完整 CTest 实际 **75/77** 通过：Task 8 的 15 项 coordinator 测试均通过；`app_process_behavior` 因 Task 9 草稿的 graceful-shutdown 行为失败，不能归入或在本任务范围内修复。完整 build 同样被 Task 9 `AppControllerTests.cpp` 所引用而尚未实现的 API 阻断；Task 8 unit target 已成功。
+
+### 自审与未闭合验收
+
+- `git diff --check`：通过。暂存前逐项确认仅含 Task 8 的 coordinator 源/测试、两处 CMake 注册和本进度记录；`tests/CMakeLists.txt` 仅暂存 `CaptureCoordinatorTests.cpp` 单行。
+- 自审：重试使用原始 monitor descriptor，不重新按鼠标选择；所有 completion 先验证 shutdown、请求/attempt、catalog 与 device generation；availability 信号先于 notice；析构后的 retained completion 不解引用 coordinator。
+- 未闭合验收：真实桌面、多显示器/混合 DPI/HDR 的 WGC 捕获，以及 Task 9 composition root/进程关闭行为仍待后续集成；它们不能由本任务 fake-service 单元测试替代。

@@ -1,6 +1,7 @@
 add_executable(landscapecutter_unit_tests
     app/AppMetadataTests.cpp
     app/LaunchOptionsTests.cpp
+    app/CaptureCoordinatorTests.cpp
     platform/MonitorTypesTests.cpp
     platform/windows/DisplayCatalogTests.cpp
 )
