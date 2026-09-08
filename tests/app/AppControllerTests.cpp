@@ -99,6 +99,22 @@ TEST_CASE("structured success notices include monitor size and pixel format") {
     CHECK(formatted.contains(QStringLiteral("SDR BGRA8")));
 }
 
+TEST_CASE("startup capture prerequisites have distinct user-facing notices") {
+    const auto unsupported = lc::app::formatCaptureNotice(
+        lc::app::CaptureNotice{.code = lc::app::CaptureNoticeCode::Unsupported});
+    const auto displayUnavailable = lc::app::formatCaptureNotice(
+        lc::app::CaptureNotice{.code = lc::app::CaptureNoticeCode::DisplayUnavailable});
+    const auto deviceUnavailable = lc::app::formatCaptureNotice(
+        lc::app::CaptureNotice{.code = lc::app::CaptureNoticeCode::DeviceUnavailable});
+
+    CHECK(unsupported.contains(QStringLiteral("不支持")));
+    CHECK(displayUnavailable.contains(QStringLiteral("显示器不可用")));
+    CHECK(deviceUnavailable.contains(QStringLiteral("图形设备不可用")));
+    CHECK(unsupported != displayUnavailable);
+    CHECK(displayUnavailable != deviceUnavailable);
+    CHECK(deviceUnavailable != unsupported);
+}
+
 TEST_CASE("an F2 hotkey conflict keeps tray capture enabled and reports the conflict") {
     int argc = 1;
     char applicationName[] = "landscapecutter_app_controller_hotkey_tests";

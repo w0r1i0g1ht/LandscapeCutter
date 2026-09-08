@@ -451,3 +451,40 @@ HEAD `9e593bb18ea69cc5095e012465dcd675a822ed0d`、tracked status clean、特殊 
 `ProductNamedObjectsAbsent=True`。自动证据保持 `a333e4f` 的 fresh build、默认 **90/90**、desktop
 **2/2**；单屏 `3200x2000`、`192x192 DPI`、SDR，耗时 `131ms/118ms`。多屏、混合 DPI、负坐标与
 HDR 仍为**环境未覆盖**，不影响已完成的单屏验收。里程碑 1 完成。
+
+## 最终整分支审查修复波次（2026-09-08，待 scoped re-review）
+
+Fix base 为 `0edec45cc40226095e278fa38cb0cdb3ec932c99`。最终整分支审查报告的 3 个
+Important 已在同一波次修复，但此处不提前写作最终整分支审查 Clean，仍待主 Agent 做 scoped
+re-review：
+
+1. `CMakePresets.json` 的 toolchain 恢复为精确的
+   `${sourceDir}/.tools/vcpkg/scripts/buildsystems/vcpkg.cmake`。新增 preset portability 行为测试，将
+   preset 复制到临时 relocated checkout，并放置只存在于新 `${sourceDir}` 下的 sentinel toolchain。
+   RED 为 relocated configure 明确报错未从新 source directory 解析；GREEN 为同一脚本通过。
+2. `CaptureRuntimeState` 独立保存 capture support、catalog 与 device 三项前置条件。组合 RED
+   `initial(true,false,false)` 在 catalog 成功 refresh 后错误得到 Available（3 个断言失败）；GREEN
+   为 device 失败仍保持 DeviceUnavailable、菜单 disabled、F2 不注册。coordinator
+   DeviceUnavailable 与 hotkey Failed 也写回同一持久前置条件，不能被 display refresh 自动恢复。
+3. runtime state 新增一次性结构化 pending notice。三种启动不可用状态分别产生 Unsupported、
+   DisplayUnavailable、DeviceUnavailable；运行中 refresh 失败只在状态变化时产生
+   DisplayUnavailable；hotkey Failed 产生 DeviceUnavailable。`main()` 在同步调用可能触发
+   `availabilityChanged` 的 `coordinator.setAvailability()` 前先消费并复制 notice，再实际调用
+   `AppController::showCaptureNotice(CaptureNotice{...})`，因此 reentrant 同步不会吞掉通知；
+   coordinator 自己发出的 notice 不被 setter 路径重复生成。
+
+验证使用 portable preset，并仅在 fresh configure 命令行提供 linked-worktree 本机 canonical override：
+
+```powershell
+cmake --fresh --preset windows-msvc-debug --toolchain D:/Projects/LandscapeCutter/.tools/vcpkg/scripts/buildsystems/vcpkg.cmake
+cmake --build --preset windows-msvc-debug
+ctest --preset windows-msvc-debug -R '<Task 9 runtime/controller/process focused regex>' --output-on-failure
+ctest --preset windows-msvc-debug --output-on-failure
+ctest --preset windows-msvc-debug-desktop --output-on-failure
+git diff --check
+```
+
+结果：fresh configure 与完整 build 通过；Task 9 focused/process **21/21**；默认非 desktop
+**100/100**；desktop **2/2**；preset portability test 包含在默认全套并通过。进程测试前后
+`LandscapeCutter` 与 `landscapecutter_hotkey_occupier` 均为 `0`。详细 RED/GREEN、命令、范围与
+自审见 `.superpowers/sdd/2026-09-03-milestone-1-windows-graphics-foundation/final-fix-report.md`。

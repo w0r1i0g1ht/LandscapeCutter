@@ -89,3 +89,21 @@ git diff --check
 - Important：ADDRESSED。
 - New Breakage：None。
 - 最终 verdict：All findings addressed。
+
+## 最终审查后的 preset 证据澄清（2026-09-08）
+
+本报告前面的 Task 10 历史证据使用了**当时错误提交的绝对 toolchain preset**；这些命令与结果按
+当时事实保留，不回写成后来才有的 portable 配置。最终整分支审查指出该 preset 破坏其他 checkout
+后，`CMakePresets.json` 已恢复为精确的
+`${sourceDir}/.tools/vcpkg/scripts/buildsystems/vcpkg.cmake`，并新增 relocated-checkout 行为回归。
+
+最终修复波次重新验证时，fresh configure 从 portable preset 出发；由于本 linked worktree 的 Qt/vcpkg
+本机环境需要 canonical path，只在本次命令行使用：
+
+```powershell
+cmake --fresh --preset windows-msvc-debug --toolchain D:/Projects/LandscapeCutter/.tools/vcpkg/scripts/buildsystems/vcpkg.cmake
+```
+
+该 override 未写回 preset 或全局配置。重新验证结果为完整 build 通过、默认非 desktop **100/100**、
+desktop **2/2**；详细证据位于同目录 `final-fix-report.md`。这项澄清不改变 Task 10 在 2026-09-07
+记录的原始命令、单屏 metadata 或人工验收事实。

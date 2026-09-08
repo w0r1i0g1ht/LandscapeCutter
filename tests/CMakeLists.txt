@@ -168,3 +168,13 @@ add_test(NAME cmake_sdk_floor_behavior
         -SourceRoot ${CMAKE_SOURCE_DIR}
 )
 set_tests_properties(cmake_sdk_floor_behavior PROPERTIES TIMEOUT 30)
+
+add_test(NAME cmake_preset_portability_behavior
+    COMMAND ${POWERSHELL_EXECUTABLE}
+        -NoProfile
+        -ExecutionPolicy Bypass
+        -File ${CMAKE_CURRENT_SOURCE_DIR}/scripts/CMakePresetPolicyTests.ps1
+        -CMakeCommand ${CMAKE_COMMAND}
+        -SourceRoot ${CMAKE_SOURCE_DIR}
+)
+set_tests_properties(cmake_preset_portability_behavior PROPERTIES TIMEOUT 30)

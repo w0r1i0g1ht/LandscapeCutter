@@ -101,9 +101,13 @@ int main(int argc, char* argv[]) {
     lc::platform::windows::GlobalHotkeyService hotkey(nativeWindow);
     const bool supported = lc::capture::windows::MonitorCaptureService::isSupported();
     auto runtimeState = lc::app::CaptureRuntimePolicy::initial(supported, catalogReady, deviceReady);
-    const auto applyRuntimeState = [&controller, &coordinator](const lc::app::CaptureRuntimeState& state) {
+    const auto applyRuntimeState = [&controller, &coordinator](lc::app::CaptureRuntimeState& state) {
+        const auto pendingNotice = lc::app::CaptureRuntimePolicy::takePendingNotice(state);
         controller.setCaptureEnabled(state.captureEnabled);
         coordinator.setAvailability(state.availability);
+        if (pendingNotice) {
+            controller.showCaptureNotice(lc::app::CaptureNotice{.code = *pendingNotice});
+        }
     };
     applyRuntimeState(runtimeState);
     if (runtimeState.registerHotkey) {
@@ -125,12 +129,10 @@ int main(int argc, char* argv[]) {
                      &controller, &lc::app::AppController::showCaptureNotice);
     QObject::connect(&coordinator, &lc::app::CaptureCoordinator::availabilityChanged,
                      &controller, [&controller, &hotkey, &runtimeState](const lc::app::CaptureAvailability availability) {
-                         runtimeState.availability = availability;
-                         runtimeState.captureEnabled = availability == lc::app::CaptureAvailability::Available;
-                         runtimeState.registerHotkey = false;
-                         runtimeState.showHotkeyConflict = false;
-                         controller.setCaptureEnabled(availability == lc::app::CaptureAvailability::Available);
-                         if (availability != lc::app::CaptureAvailability::Available) { hotkey.unregister(); }
+                         runtimeState = lc::app::CaptureRuntimePolicy::afterAvailabilityChanged(
+                             runtimeState, availability);
+                         controller.setCaptureEnabled(runtimeState.captureEnabled);
+                         if (!runtimeState.captureEnabled) { hotkey.unregister(); }
                      });
     QObject::connect(&instanceCoordinator,
                      &lc::platform::windows::SingleInstanceCoordinator::activationRequested,
