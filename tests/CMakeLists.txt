@@ -1,4 +1,7 @@
 add_executable(landscapecutter_unit_tests
+    snip/SnapshotBatchTests.cpp
+    snip/SelectionModelTests.cpp
+    snip/SnapshotImageTests.cpp
     app/AppMetadataTests.cpp
     app/LaunchOptionsTests.cpp
     app/CaptureCoordinatorTests.cpp
@@ -16,8 +19,15 @@ lc_enable_warnings(landscapecutter_unit_tests)
 
 include(Catch)
 catch_discover_tests(landscapecutter_unit_tests)
+add_custom_command(TARGET landscapecutter_unit_tests POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different "$<TARGET_FILE:libjpeg-turbo::jpeg>" "$<TARGET_FILE_DIR:landscapecutter_unit_tests>"
+    COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:landscapecutter_unit_tests>/imageformats"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different "$<TARGET_FILE:Qt6::QJpegPlugin>" "$<TARGET_FILE_DIR:landscapecutter_unit_tests>/imageformats"
+)
 
 add_executable(landscapecutter_app_controller_tests
+    snip/SnipOverlayTests.cpp
+    snip/SnipSessionTests.cpp
     app/AppControllerTests.cpp
     ../resources/resources.qrc
 )
@@ -127,6 +137,13 @@ target_link_libraries(landscapecutter_desktop_capture_tests PRIVATE
 )
 target_link_options(landscapecutter_desktop_capture_tests PRIVATE /MANIFEST:NO)
 lc_enable_warnings(landscapecutter_desktop_capture_tests)
+add_custom_command(TARGET landscapecutter_desktop_capture_tests POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E make_directory
+        "$<TARGET_FILE_DIR:landscapecutter_desktop_capture_tests>/platforms"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "$<TARGET_FILE:Qt6::QWindowsIntegrationPlugin>"
+        "$<TARGET_FILE_DIR:landscapecutter_desktop_capture_tests>/platforms"
+)
 catch_discover_tests(landscapecutter_desktop_capture_tests
     PROPERTIES LABELS desktop-integration TIMEOUT 30
 )

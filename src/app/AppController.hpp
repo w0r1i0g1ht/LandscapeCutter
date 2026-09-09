@@ -14,20 +14,21 @@ namespace lc::app {
 class AppController final : public QObject {
     Q_OBJECT
 
-public:
+  public:
     explicit AppController(QApplication& application);
 
     [[nodiscard]] bool start();
     void setCaptureEnabled(bool enabled);
     void showCaptureNotice(const CaptureNotice& notice);
+    void showErrorMessage(const QString& message);
     void showAlreadyRunning();
     void showHotkeyConflict();
     void showCompatibilityMode();
 
-signals:
+  signals:
     void captureRequested();
 
-private:
+  private:
     QApplication& application_;
     QMenu trayMenu_;
     QAction captureAction_;

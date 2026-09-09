@@ -19,18 +19,21 @@ struct CaptureRuntimeState final {
 };
 
 class CaptureRuntimePolicy final {
-public:
+  public:
     [[nodiscard]] static CaptureRuntimeState initial(bool supported, bool catalogReady,
                                                      bool deviceReady) noexcept;
-    [[nodiscard]] static CaptureRuntimeState afterDisplayRefresh(
-        CaptureRuntimeState current, bool refreshed) noexcept;
-    [[nodiscard]] static CaptureRuntimeState afterHotkeyRegistration(
-        CaptureRuntimeState current,
-        platform::windows::HotkeyRegistrationStatus status) noexcept;
-    [[nodiscard]] static CaptureRuntimeState afterAvailabilityChanged(
-        CaptureRuntimeState current, CaptureAvailability availability) noexcept;
-    [[nodiscard]] static std::optional<CaptureNoticeCode> takePendingNotice(
-        CaptureRuntimeState& state) noexcept;
+    [[nodiscard]] static CaptureRuntimeState afterDisplayRefresh(CaptureRuntimeState current,
+                                                                 bool refreshed) noexcept;
+    [[nodiscard]] static CaptureRuntimeState
+    afterDisplayInvalidated(CaptureRuntimeState current) noexcept;
+    [[nodiscard]] static CaptureRuntimeState
+    afterHotkeyRegistration(CaptureRuntimeState current,
+                            platform::windows::HotkeyRegistrationStatus status) noexcept;
+    [[nodiscard]] static CaptureRuntimeState
+    afterAvailabilityChanged(CaptureRuntimeState current,
+                             CaptureAvailability availability) noexcept;
+    [[nodiscard]] static std::optional<CaptureNoticeCode>
+    takePendingNotice(CaptureRuntimeState& state) noexcept;
 };
 
-}  // namespace lc::app
+} // namespace lc::app

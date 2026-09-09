@@ -1,4 +1,13 @@
 add_library(landscapecutter_app_core STATIC
+    snip/SnipOverlay.cpp
+    snip/SnipOverlay.hpp
+    snip/SnipSession.cpp
+    snip/SnipSession.hpp
+    snip/SnapshotReadback.cpp
+    snip/SelectionModel.cpp
+    snip/SnapshotBatch.cpp
+    snip/SnapshotBatch.hpp
+    snip/SnapshotImage.cpp
     app/AppController.cpp
     app/CaptureRuntimePolicy.hpp
     app/CaptureRuntimePolicy.cpp
@@ -80,6 +89,9 @@ target_link_options(LandscapeCutter PRIVATE
 lc_enable_warnings(LandscapeCutter)
 
 add_custom_command(TARGET LandscapeCutter POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different "$<TARGET_FILE:libjpeg-turbo::jpeg>" "$<TARGET_FILE_DIR:LandscapeCutter>"
+    COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:LandscapeCutter>/imageformats"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different "$<TARGET_FILE:Qt6::QJpegPlugin>" "$<TARGET_FILE_DIR:LandscapeCutter>/imageformats"
     COMMAND ${CMAKE_COMMAND} -E make_directory
         "$<TARGET_FILE_DIR:LandscapeCutter>/platforms"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different

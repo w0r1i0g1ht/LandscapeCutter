@@ -46,6 +46,7 @@ set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
 
 find_package(Qt6 6.8.2 EXACT REQUIRED COMPONENTS Core Gui Widgets)
+find_package(libjpeg-turbo CONFIG REQUIRED)
 message(STATUS "Using Qt ${Qt6_VERSION}")
 
 find_package(spdlog CONFIG REQUIRED)

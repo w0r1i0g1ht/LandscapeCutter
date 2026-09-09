@@ -10,7 +10,7 @@
 namespace lc::platform::windows {
 
 class DisplayCatalog final {
-public:
+  public:
     using RefreshResult = std::variant<std::vector<MonitorDescriptor>, DisplayError>;
 
     explicit DisplayCatalog(IDisplayTopologySource& source);
@@ -20,12 +20,15 @@ public:
     std::optional<MonitorDescriptor> monitorFromPoint(POINT point) const;
     std::uint64_t generation() const noexcept;
     bool healthy() const noexcept;
+    const std::vector<MonitorDescriptor>& monitors() const noexcept {
+        return monitors_;
+    }
 
-private:
+  private:
     IDisplayTopologySource& source_;
     std::vector<MonitorDescriptor> monitors_;
     std::uint64_t generation_{0};
     bool healthy_{false};
 };
 
-}  // namespace lc::platform::windows
+} // namespace lc::platform::windows

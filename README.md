@@ -7,12 +7,12 @@ LandscapeCutter 正在从 Python 原型重构为 C++20 与 Qt 6。项目将先�
 
 ## 当前状态
 
-**里程碑 0 和里程碑 1 已完成。** 当前仓库已经
-切换到 C++/Qt 工程，具备可复现的构建环境、自动测试和可运行的 Windows 系统托盘程序。
+**里程碑 0、里程碑 1 和里程碑 2 已完成。** 当前仓库已经切换到 C++/Qt 工程，
+具备可复现的构建环境、自动测试和可运行的 Windows 系统托盘程序。
 
-当前版本的 F2 仅捕获鼠标所在显示器的一张**内存**帧，并通知物理尺寸与像素格式；不保存
-文件、不写剪贴板，也不提供选区、标注或贴图。这些用户输出能力属于里程碑 2，因此暂不适合作为
-日常截图工具使用。
+当前版本按 F2 会先冻结全部显示器，再显示矩形选区。选区支持创建、移动和八方向缩放，可复制到
+剪贴板或保存为 PNG/JPEG。自动测试和当前单屏 200% DPI 桌面验收已经通过；真实多显示器、混合
+DPI 和 HDR 硬件仍需补充人工验收。标注和贴图属于后续里程碑。
 
 已经完成并验证的基础能力：
 
@@ -29,7 +29,7 @@ LandscapeCutter 正在从 Python 原型重构为 C++20 与 Qt 6。项目将先�
 - [x] **里程碑 0：C++ 工程基础**——冻结 Python 原型，建立可构建、可测试的托盘程序。
 - [x] **里程碑 1：Windows 图形基础**——D3D11、Windows Graphics Capture、显示器模型、
   Per-Monitor V2 DPI、全局快捷键和单实例；自动、真实桌面与人工验收均已完成。
-- [ ] **里程碑 2：静态截图闭环**——冻结多显示器快照、矩形选区、复制和图片保存。
+- [x] **里程碑 2：静态截图闭环**——冻结多显示器快照、矩形选区、复制和图片保存；自动、真实桌面与当前环境人工验收均已完成。
 - [ ] **里程碑 3：标注系统**——矩形、椭圆、箭头、画笔、文字、马赛克、撤销和重做。
 - [ ] **里程碑 4：静态贴图**——多个无边框置顶贴图及拖动、缩放和透明度控制。
 - [ ] **里程碑 5：实时区域贴图**——目标窗口相对选区、GPU 裁剪和实时显示。
@@ -82,6 +82,13 @@ Graphics Capture 与 session 关闭后 readback 验收。由于默认测试包�
 
 程序启动后驻留在 Windows 系统托盘，并显示启动通知。右键托盘图标，选择“退出”即可关闭。
 
+按 F2 或选择托盘菜单“截图”进入冻结选区：
+
+- 拖动空白处创建选区；拖动选区内部可移动，拖动边或角可缩放；
+- Enter、Ctrl+C 或双击选区复制并结束；
+- Ctrl+S 或“保存”可选择 PNG/JPEG 文件；
+- Esc 或“取消”关闭本次截图。
+
 ## Python 原型
 
 最终 Python 原型保存在带注释的 Git 标签 `python-prototype-final` 中。主分支只保留迁移说明，
@@ -93,6 +100,10 @@ Graphics Capture 与 session 关闭后 readback 验收。由于默认测试包�
 - [里程碑 0 实施计划](docs/superpowers/plans/2026-09-02-milestone-0-cpp-foundation.md)
 - [里程碑 0 执行进度](docs/superpowers/progress/2026-09-02-milestone-0-progress.md)
 - [里程碑 1 执行进度](docs/superpowers/progress/2026-09-03-milestone-1-progress.md)
+- [里程碑 2 详细设计](docs/superpowers/specs/2026-09-08-milestone-2-static-snip-design.md)
+- [里程碑 2 实施计划](docs/superpowers/plans/2026-09-08-milestone-2-static-snip.md)
+- [里程碑 2 执行进度](docs/superpowers/progress/2026-09-09-milestone-2-progress.md)
+- [后续体验与外观优化计划](docs/superpowers/plans/2026-09-09-experience-and-appearance-backlog.md)
 
 ## 许可证
 

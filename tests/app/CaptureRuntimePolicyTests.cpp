@@ -22,6 +22,18 @@ TEST_CASE("a failed display refresh becomes unavailable and a later refresh reco
     CHECK(state.registerHotkey);
 }
 
+TEST_CASE("display invalidation blocks capture before the debounced refresh") {
+    auto state = CaptureRuntimePolicy::initial(true, true, true);
+
+    state = CaptureRuntimePolicy::afterDisplayInvalidated(state);
+
+    CHECK_FALSE(state.catalogReady);
+    CHECK(state.availability == CaptureAvailability::DisplayUnavailable);
+    CHECK_FALSE(state.captureEnabled);
+    CHECK_FALSE(state.registerHotkey);
+    CHECK_FALSE(CaptureRuntimePolicy::takePendingNotice(state).has_value());
+}
+
 TEST_CASE("device unavailable remains disabled across display events") {
     auto state = CaptureRuntimePolicy::initial(true, true, false);
 
