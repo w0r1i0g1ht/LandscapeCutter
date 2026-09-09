@@ -10,14 +10,28 @@ add_executable(landscapecutter_unit_tests
     platform/windows/DisplayCatalogTests.cpp
 )
 
+include(Catch)
+
+add_executable(landscapecutter_annotation_tests
+    annotation/AnnotationDocumentTests.cpp
+    annotation/AnnotationHistoryTests.cpp
+)
+
+target_link_libraries(landscapecutter_annotation_tests PRIVATE
+    Catch2::Catch2WithMain
+    landscapecutter_app_core
+)
+
+lc_enable_warnings(landscapecutter_annotation_tests)
+
+catch_discover_tests(landscapecutter_annotation_tests)
+
 target_link_libraries(landscapecutter_unit_tests PRIVATE
     Catch2::Catch2WithMain
     landscapecutter_app_core
 )
 
 lc_enable_warnings(landscapecutter_unit_tests)
-
-include(Catch)
 catch_discover_tests(landscapecutter_unit_tests)
 add_custom_command(TARGET landscapecutter_unit_tests POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_if_different "$<TARGET_FILE:libjpeg-turbo::jpeg>" "$<TARGET_FILE_DIR:landscapecutter_unit_tests>"

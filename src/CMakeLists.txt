@@ -1,4 +1,9 @@
 add_library(landscapecutter_app_core STATIC
+    annotation/AnnotationDocument.cpp
+    annotation/AnnotationDocument.hpp
+    annotation/AnnotationHistory.cpp
+    annotation/AnnotationHistory.hpp
+    annotation/AnnotationTypes.hpp
     snip/SnipOverlay.cpp
     snip/SnipOverlay.hpp
     snip/SnipSession.cpp
