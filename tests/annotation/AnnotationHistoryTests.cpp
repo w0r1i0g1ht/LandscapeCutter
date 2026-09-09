@@ -37,9 +37,18 @@ TEST_CASE("annotation history restores add update and delete values with selecti
     CHECK(document.objects().empty());
 
     REQUIRE(document.redo());
+    REQUIRE(document.objects().size() == 1);
+    CHECK(document.objects().front().id == id);
+    CHECK(std::get<RectangleAnnotation>(document.objects().front().payload) == testRectangle());
+    CHECK_FALSE(document.selectedId().has_value());
     REQUIRE(document.redo());
+    REQUIRE(document.objects().size() == 1);
+    CHECK(document.objects().front().id == id);
+    CHECK(std::get<EllipseAnnotation>(document.objects().front().payload) == testEllipse());
+    CHECK(document.selectedId() == id);
     REQUIRE(document.redo());
     CHECK(document.objects().empty());
+    CHECK_FALSE(document.selectedId().has_value());
 }
 
 TEST_CASE("annotation history drops redo after a new object command") {

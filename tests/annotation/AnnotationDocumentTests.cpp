@@ -27,6 +27,8 @@ TEST_CASE("annotation document owns a DPR-one base and stable object ids") {
 
     REQUIRE(first.has_value());
     REQUIRE(second.has_value());
+    CHECK(*first != 0);
+    CHECK(*second > *first);
     CHECK(*first != *second);
     CHECK(document.snapshot().base.devicePixelRatio() == 1.0);
     CHECK(document.snapshot().base.format() == QImage::Format_RGB32);
@@ -37,16 +39,23 @@ TEST_CASE("annotation document accepts every valid payload and clips its geometr
 
     CHECK(document.addObject(RectangleAnnotation{{-5, -4, 12, 10}, {Qt::red, 3.0}}).has_value());
     CHECK(document.addObject(EllipseAnnotation{{32, 22, 20, 20}, {Qt::blue, 2.0}}).has_value());
-    CHECK(document.addObject(ArrowAnnotation{{1, 2}, {10, 12}, {Qt::green, 3.0}}).has_value());
-    CHECK(document.addObject(FreehandAnnotation{{{1, 1}, {2, 2}}, {Qt::black, 3.0}}).has_value());
-    CHECK(document.addObject(TextAnnotation{{3, 4}, QStringLiteral("note"), {Qt::darkMagenta, 24.0}})
+    CHECK(document.addObject(ArrowAnnotation{{-3, 31}, {42, -2}, {Qt::green, 3.0}}).has_value());
+    CHECK(document.addObject(FreehandAnnotation{{{-2, -1}, {43, 31}}, {Qt::black, 3.0}}).has_value());
+    CHECK(document.addObject(TextAnnotation{{-4, 35}, QStringLiteral("note"), {Qt::darkMagenta, 24.0}})
               .has_value());
-    CHECK(document.addObject(MosaicAnnotation{{4, 5, 7, 8}, 12}).has_value());
+    CHECK(document.addObject(MosaicAnnotation{{34, 25, 12, 12}, 12}).has_value());
 
     const auto snapshot = document.snapshot();
     REQUIRE(snapshot.objects.size() == 6);
     CHECK(std::get<RectangleAnnotation>(snapshot.objects.front().payload).rect == QRectF{0, 0, 7, 6});
     CHECK(std::get<EllipseAnnotation>(snapshot.objects[1].payload).rect == QRectF{32, 22, 8, 8});
+    const auto& arrow = std::get<ArrowAnnotation>(snapshot.objects[2].payload);
+    CHECK(arrow.start == QPointF{0, 30});
+    CHECK(arrow.end == QPointF{40, 0});
+    const auto& freehand = std::get<FreehandAnnotation>(snapshot.objects[3].payload);
+    CHECK(freehand.points == std::vector<QPointF>{{0, 0}, {40, 30}});
+    CHECK(std::get<TextAnnotation>(snapshot.objects[4].payload).anchor == QPointF{0, 30});
+    CHECK(std::get<MosaicAnnotation>(snapshot.objects[5].payload).rect == QRectF{34, 25, 6, 5});
 }
 
 TEST_CASE("annotation document rejects invalid and empty payloads") {
@@ -70,6 +79,7 @@ TEST_CASE("removing a selected annotation clears selection without exposing it i
     CHECK(document.snapshot().objects.size() == 1);
     CHECK(document.snapshot().objects.front().id == id);
     REQUIRE(document.removeObject(id));
+    CHECK_FALSE(document.selectedId().has_value());
     CHECK_FALSE(document.select(id));
     CHECK(document.objects().empty());
 }
