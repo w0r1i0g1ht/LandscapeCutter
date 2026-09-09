@@ -15,6 +15,7 @@ include(Catch)
 add_executable(landscapecutter_annotation_tests
     annotation/AnnotationDocumentTests.cpp
     annotation/AnnotationHistoryTests.cpp
+    annotation/AnnotationRendererTests.cpp
 )
 
 target_link_libraries(landscapecutter_annotation_tests PRIVATE
