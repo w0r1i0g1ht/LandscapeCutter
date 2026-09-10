@@ -6,7 +6,12 @@ void prepareAnnotation(std::vector<FrozenMonitor> monitors, QRect selection,
                        std::function<void(QImage)> completion) {
     if (cancelled && cancelled->load(std::memory_order_acquire))
         return;
-    auto image = composeSelection(monitors, selection);
+    QImage image;
+    try {
+        image = composeSelection(monitors, selection);
+    } catch (...) {
+        image = {};
+    }
     if (cancelled && cancelled->load(std::memory_order_acquire))
         return;
     completion(std::move(image));

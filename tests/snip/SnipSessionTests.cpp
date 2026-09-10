@@ -3,6 +3,7 @@
 #include <QApplication>
 #include <QClipboard>
 #include <QElapsedTimer>
+#include <QTemporaryDir>
 #include <QThread>
 #include <algorithm>
 #include <catch2/catch_test_macros.hpp>
@@ -38,6 +39,18 @@ struct ControlledPreparation {
     QRect lockedSelection;
     std::shared_ptr<std::atomic_bool> cancellation;
     std::vector<std::function<void(QImage)>> callbacks;
+};
+
+struct ControlledSavePathChooser {
+    lc::snip::ChooseSavePath function() {
+        return [this](std::function<void(QString)> accepted, std::function<void()> rejected) {
+            accept = std::move(accepted);
+            reject = std::move(rejected);
+        };
+    }
+
+    std::function<void(QString)> accept;
+    std::function<void()> reject;
 };
 
 QImage annotationTestImage() {
@@ -89,6 +102,7 @@ TEST_CASE("snip session opens frozen overlays together and cancellation closes t
     monitor.desktopRect = {0, 0, 100, 100};
     monitor.catalogGeneration = 1;
     session.begin({monitor});
+    CHECK(session.state() == lc::snip::SnipSessionState::PreparingCapture);
     batch.ready({{{0, 0, 100, 100}, red}, {{100, 0, 100, 100}, red}});
     CHECK(session.overlayCount() == 2);
     session.cancel();
@@ -147,12 +161,15 @@ TEST_CASE("annotation preparation locks the selected rectangle before completion
     session.beginAnnotation(lc::annotation::AnnotationTool::Rectangle);
     CHECK(session.state() == lc::snip::SnipSessionState::PreparingAnnotation);
     CHECK(preparation.lockedSelection == QRect(2, 3, 10, 7));
+    CHECK(session.lockedSelection() == QRect(2, 3, 10, 7));
     selectRect(session, {4, 4}, {16, 12});
+    CHECK(session.lockedSelection() == QRect(2, 3, 10, 7));
     preparation.complete(QImage(10, 7, QImage::Format_RGB32));
     app.processEvents();
 
     REQUIRE(session.document() != nullptr);
     CHECK(session.document()->snapshot().base.size() == QSize(10, 7));
+    CHECK(session.lockedSelection() == QRect(2, 3, 10, 7));
     CHECK(session.state() == lc::snip::SnipSessionState::Annotating);
     session.cancel();
 }
@@ -174,6 +191,9 @@ TEST_CASE("empty annotation preparation returns to selecting with selection pres
     batch.ready({{{0, 0, 20, 15}, annotationTestImage()}});
     selectRect(session);
     const QRect selection = session.selection().rect();
+    int errors{};
+    QObject::connect(&session, &lc::snip::SnipSession::errorOccurred,
+                     [&errors](const QString&) { ++errors; });
 
     session.beginAnnotation(lc::annotation::AnnotationTool::Rectangle);
     preparation.complete({});
@@ -182,6 +202,7 @@ TEST_CASE("empty annotation preparation returns to selecting with selection pres
     CHECK(session.state() == lc::snip::SnipSessionState::Selecting);
     CHECK(session.selection().rect() == selection);
     CHECK(session.document() == nullptr);
+    CHECK(errors == 1);
     session.cancel();
 }
 
@@ -243,6 +264,97 @@ TEST_CASE("stale annotation preparation cannot complete a later session") {
     preparation.complete(annotationTestImage(), 1);
     app.processEvents();
     CHECK(session.state() == lc::snip::SnipSessionState::Annotating);
+    session.cancel();
+}
+
+TEST_CASE("failed annotation preparation cannot complete its same-session retry") {
+    int argc = 1;
+    char name[] = "annotation-retry-test";
+    char* argv[] = {name, nullptr};
+    QApplication app(argc, argv);
+    SessionService service;
+    SessionRecovery recovery;
+    lc::snip::SnapshotBatch batch(service, recovery, {});
+    ControlledPreparation preparation;
+    lc::snip::SnipSession session(batch, preparation.function());
+    lc::platform::windows::MonitorDescriptor monitor{};
+    monitor.desktopRect = {0, 0, 20, 15};
+    monitor.catalogGeneration = 1;
+    session.begin({monitor});
+    batch.ready({{{0, 0, 20, 15}, annotationTestImage()}});
+    selectRect(session);
+
+    session.beginAnnotation(lc::annotation::AnnotationTool::Rectangle);
+    preparation.complete({}, 0);
+    app.processEvents();
+    REQUIRE(session.state() == lc::snip::SnipSessionState::Selecting);
+    session.beginAnnotation(lc::annotation::AnnotationTool::Ellipse);
+    preparation.complete(annotationTestImage(), 0);
+    app.processEvents();
+
+    CHECK(session.state() == lc::snip::SnipSessionState::PreparingAnnotation);
+    CHECK(session.document() == nullptr);
+    preparation.complete(annotationTestImage(), 1);
+    app.processEvents();
+    CHECK(session.state() == lc::snip::SnipSessionState::Annotating);
+    session.cancel();
+}
+
+TEST_CASE("annotation preparation exceptions return to selecting and report an error") {
+    int argc = 1;
+    char name[] = "annotation-exception-test";
+    char* argv[] = {name, nullptr};
+    QApplication app(argc, argv);
+    SessionService service;
+    SessionRecovery recovery;
+    lc::snip::SnapshotBatch batch(service, recovery, {});
+    lc::snip::SnipSession session(batch, [](std::vector<lc::snip::FrozenMonitor>, QRect,
+                                            std::shared_ptr<std::atomic_bool>,
+                                            std::function<void(QImage)>) { throw 1; });
+    lc::platform::windows::MonitorDescriptor monitor{};
+    monitor.desktopRect = {0, 0, 20, 15};
+    monitor.catalogGeneration = 1;
+    session.begin({monitor});
+    batch.ready({{{0, 0, 20, 15}, annotationTestImage()}});
+    selectRect(session);
+    const QRect selection = session.selection().rect();
+    int errors{};
+    QObject::connect(&session, &lc::snip::SnipSession::errorOccurred,
+                     [&errors](const QString&) { ++errors; });
+
+    CHECK_NOTHROW(session.beginAnnotation(lc::annotation::AnnotationTool::Rectangle));
+    app.processEvents();
+    CHECK(session.state() == lc::snip::SnipSessionState::Selecting);
+    CHECK(session.selection().rect() == selection);
+    CHECK(errors == 1);
+    session.cancel();
+}
+
+TEST_CASE("direct save enters the save-path state without annotation") {
+    int argc = 1;
+    char name[] = "selection-save-state-test";
+    char* argv[] = {name, nullptr};
+    QApplication app(argc, argv);
+    SessionService service;
+    SessionRecovery recovery;
+    lc::snip::SnapshotBatch batch(service, recovery, {});
+    ControlledSavePathChooser chooser;
+    lc::snip::SnipSession session(batch, lc::snip::PrepareAnnotation{}, chooser.function());
+    lc::platform::windows::MonitorDescriptor monitor{};
+    monitor.desktopRect = {0, 0, 20, 15};
+    monitor.catalogGeneration = 1;
+    session.begin({monitor});
+    batch.ready({{{0, 0, 20, 15}, annotationTestImage()}});
+    selectRect(session);
+    session.save();
+    CHECK(session.state() == lc::snip::SnipSessionState::ChoosingSavePath);
+    chooser.reject();
+    CHECK(session.state() == lc::snip::SnipSessionState::Selecting);
+    QTemporaryDir directory;
+    REQUIRE(directory.isValid());
+    session.save();
+    chooser.accept(directory.filePath("selection.png"));
+    CHECK(session.state() == lc::snip::SnipSessionState::ExportingFromSelection);
     session.cancel();
 }
 

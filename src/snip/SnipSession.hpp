@@ -12,6 +12,7 @@
 class QFileDialog;
 namespace lc::snip {
 class SnipOverlay;
+using ChooseSavePath = std::function<void(std::function<void(QString)>, std::function<void()>)>;
 enum class SnipSessionState {
     Idle,
     PreparingCapture,
@@ -28,6 +29,7 @@ class SnipSession final : public QObject {
   public:
     explicit SnipSession(SnapshotBatch&, QObject* parent = nullptr);
     SnipSession(SnapshotBatch&, PrepareAnnotation, QObject* parent = nullptr);
+    SnipSession(SnapshotBatch&, PrepareAnnotation, ChooseSavePath, QObject* parent = nullptr);
     ~SnipSession() override;
     void begin(std::vector<platform::windows::MonitorDescriptor>);
     void cancel();
@@ -43,6 +45,9 @@ class SnipSession final : public QObject {
     [[nodiscard]] annotation::AnnotationDocument* document() const noexcept {
         return document_.get();
     }
+    [[nodiscard]] QRect lockedSelection() const noexcept {
+        return lockedSelection_;
+    }
     std::size_t overlayCount() const {
         return overlays_.size();
     }
@@ -54,7 +59,12 @@ class SnipSession final : public QObject {
 
   private:
     void open(std::vector<FrozenMonitor>);
-    void annotationPrepared(std::uint64_t requestId, QImage image);
+    void annotationPrepared(std::uint64_t sessionRequestId, std::uint64_t preparationRequestId,
+                            QImage image);
+    void invalidateAnnotationPreparation(bool clearSelection = true) noexcept;
+    void chooseSavePath();
+    void savePathChosen(QString path);
+    void savePathCancelled();
     void exportImage(QString path = {}, QByteArray format = {});
     void setBusy(bool);
     SnapshotBatch& batch_;
@@ -64,10 +74,13 @@ class SnipSession final : public QObject {
     QPointer<QFileDialog> dialog_;
     QThreadPool workers_;
     PrepareAnnotation preparation_;
+    ChooseSavePath savePathChooser_;
     std::shared_ptr<std::atomic_bool> cancellation_;
     std::unique_ptr<annotation::AnnotationDocument> document_;
     annotation::AnnotationTool tool_{annotation::AnnotationTool::Select};
     std::uint64_t id_ = 0;
+    std::uint64_t annotationPreparationId_ = 0;
+    QRect lockedSelection_;
     bool active_ = false, busy_ = false, preparing_ = false;
     SnipSessionState state_{SnipSessionState::Idle};
 };
