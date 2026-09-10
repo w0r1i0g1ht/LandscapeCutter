@@ -5,6 +5,7 @@
 #include <QKeyEvent>
 #include <QMouseEvent>
 #include <QPainter>
+#include <QPlainTextEdit>
 #include <QToolButton>
 
 #include <catch2/catch_test_macros.hpp>
@@ -331,5 +332,109 @@ TEST_CASE("annotation toolbar copy and save requests stay available without expo
 
     CHECK(copies == 1);
     CHECK(saves == 1);
+}
+
+TEST_CASE("annotation text editor exists only on the active toolbar host and commits once") {
+    ApplicationFixture fixture;
+    SelectionModel selection;
+    selection.setBounds({0, 0, 40, 30});
+    auto document = annotationDocument();
+    AnnotationInteraction interaction(document);
+    interaction.setTool(AnnotationTool::Text);
+    QImage image({40, 30}, QImage::Format_RGB32);
+    image.fill(Qt::white);
+    SnipOverlay passive{{{0, 0, 40, 30}, image}, selection};
+    SnipOverlay host{{{0, 0, 40, 30}, image}, selection};
+    passive.setToolbarHost(false);
+    host.setToolbarHost(true);
+    passive.setAnnotationContext(&document, &interaction, {0, 0, 40, 30});
+    host.setAnnotationContext(&document, &interaction, {0, 0, 40, 30});
+
+    QMouseEvent press{QEvent::MouseButtonPress, QPointF{5, 6}, QPointF{5, 6},
+                      Qt::LeftButton, Qt::LeftButton, Qt::NoModifier};
+    QApplication::sendEvent(&passive, &press);
+    CHECK(passive.findChild<QPlainTextEdit*>("annotationTextEditor") == nullptr);
+
+    QApplication::sendEvent(&host, &press);
+    auto* editor = host.findChild<QPlainTextEdit*>("annotationTextEditor");
+    REQUIRE(editor != nullptr);
+    editor->setPlainText(QStringLiteral("first"));
+    QKeyEvent commit{QEvent::KeyPress, Qt::Key_Return, Qt::ControlModifier};
+    QApplication::sendEvent(editor, &commit);
+
+    CHECK(host.findChild<QPlainTextEdit*>("annotationTextEditor") == nullptr);
+    REQUIRE(document.objects().size() == 1);
+    CHECK(std::get<TextAnnotation>(document.objects().front().payload).anchor == QPointF(5, 6));
+    CHECK(std::get<TextAnnotation>(document.objects().front().payload).text == QStringLiteral("first"));
+    REQUIRE(document.undo());
+    CHECK(document.objects().empty());
+}
+
+TEST_CASE("annotation text editor keeps editing shortcuts local and escapes without copying") {
+    ApplicationFixture fixture;
+    SelectionModel selection;
+    selection.setBounds({0, 0, 40, 30});
+    auto document = annotationDocument();
+    AnnotationInteraction interaction(document);
+    interaction.setTool(AnnotationTool::Text);
+    SnipOverlay overlay{frozenMonitor(), selection};
+    overlay.setToolbarHost(true);
+    overlay.setAnnotationContext(&document, &interaction, {-40, 10, 40, 30});
+    int copies{};
+    int saves{};
+    QObject::connect(&overlay, &SnipOverlay::copyRequested, [&copies] { ++copies; });
+    QObject::connect(&overlay, &SnipOverlay::saveRequested, [&saves] { ++saves; });
+
+    QMouseEvent press{QEvent::MouseButtonPress, QPointF{5, 6}, QPointF{5, 6},
+                      Qt::LeftButton, Qt::LeftButton, Qt::NoModifier};
+    QApplication::sendEvent(&overlay, &press);
+    auto* editor = overlay.findChild<QPlainTextEdit*>("annotationTextEditor");
+    REQUIRE(editor != nullptr);
+    editor->setPlainText(QStringLiteral("a"));
+    QKeyEvent enter{QEvent::KeyPress, Qt::Key_Return, Qt::NoModifier};
+    QApplication::sendEvent(editor, &enter);
+    CHECK(editor->toPlainText() == QStringLiteral("a\\n"));
+    QKeyEvent copy{QEvent::KeyPress, Qt::Key_C, Qt::ControlModifier};
+    QApplication::sendEvent(editor, &copy);
+    QKeyEvent save{QEvent::KeyPress, Qt::Key_S, Qt::ControlModifier};
+    QApplication::sendEvent(editor, &save);
+    CHECK(copies == 0);
+    CHECK(saves == 0);
+
+    QKeyEvent escape{QEvent::KeyPress, Qt::Key_Escape, Qt::NoModifier};
+    QApplication::sendEvent(editor, &escape);
+    CHECK(overlay.findChild<QPlainTextEdit*>("annotationTextEditor") == nullptr);
+    CHECK(document.objects().empty());
+}
+
+TEST_CASE("double-clicking text reopens one editor without requesting screenshot copy") {
+    ApplicationFixture fixture;
+    SelectionModel selection;
+    selection.setBounds({0, 0, 40, 30});
+    auto document = annotationDocument();
+    const auto id = document.addObject(TextAnnotation{{6, 5}, QStringLiteral("old"), {Qt::red, 24}});
+    REQUIRE(id.has_value());
+    AnnotationInteraction interaction(document);
+    interaction.setTool(AnnotationTool::Select);
+    SnipOverlay overlay{{{0, 0, 40, 30}, annotationDocument().snapshot().base}, selection};
+    overlay.setToolbarHost(true);
+    overlay.setAnnotationContext(&document, &interaction, {0, 0, 40, 30});
+    int copies{};
+    QObject::connect(&overlay, &SnipOverlay::copyRequested, [&copies] { ++copies; });
+
+    QMouseEvent doubleClick{QEvent::MouseButtonDblClick, QPointF{7, 6}, QPointF{7, 6},
+                            Qt::LeftButton, Qt::LeftButton, Qt::NoModifier};
+    QApplication::sendEvent(&overlay, &doubleClick);
+    auto* editor = overlay.findChild<QPlainTextEdit*>("annotationTextEditor");
+    REQUIRE(editor != nullptr);
+    CHECK(editor->toPlainText() == QStringLiteral("old"));
+    CHECK(copies == 0);
+    editor->setPlainText(QStringLiteral("new"));
+    QKeyEvent commit{QEvent::KeyPress, Qt::Key_Return, Qt::ControlModifier};
+    QApplication::sendEvent(editor, &commit);
+    CHECK(document.objects().size() == 1);
+    CHECK(std::get<TextAnnotation>(document.objects().front().payload).text == QStringLiteral("new"));
+    REQUIRE(document.undo());
+    CHECK(std::get<TextAnnotation>(document.objects().front().payload).text == QStringLiteral("old"));
 }
 } // namespace

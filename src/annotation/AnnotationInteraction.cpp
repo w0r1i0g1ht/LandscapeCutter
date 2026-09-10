@@ -1,4 +1,5 @@
 #include "annotation/AnnotationInteraction.hpp"
+#include "annotation/AnnotationRenderer.hpp"
 
 #include <QLineF>
 
@@ -54,6 +55,8 @@ QRectF payloadBounds(const AnnotationPayload& payload) {
                     maximumY = std::max(maximumY, point.y());
                 }
                 return {minimumX, minimumY, maximumX - minimumX, maximumY - minimumY};
+            } else if constexpr (std::is_same_v<Value, TextAnnotation>) {
+                return textLogicalRect(value);
             } else {
                 return QRectF(value.anchor, QSizeF{});
             }
@@ -112,7 +115,8 @@ void AnnotationInteraction::setStyle(AnnotationStyle style) {
             if constexpr (std::is_same_v<Value, RectangleAnnotation> ||
                           std::is_same_v<Value, EllipseAnnotation> ||
                           std::is_same_v<Value, ArrowAnnotation> ||
-                          std::is_same_v<Value, FreehandAnnotation>) {
+                          std::is_same_v<Value, FreehandAnnotation> ||
+                          std::is_same_v<Value, TextAnnotation>) {
                 value.style = style;
                 return true;
             }
@@ -204,6 +208,8 @@ std::optional<AnnotationId> AnnotationInteraction::hitTest(QPointF point) const 
                             return true;
                     }
                     return false;
+                } else if constexpr (std::is_same_v<Value, TextAnnotation>) {
+                    return textLogicalRect(value).contains(point);
                 }
                 return false;
             },

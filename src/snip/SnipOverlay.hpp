@@ -2,8 +2,12 @@
 
 #include "snip/SelectionModel.hpp"
 #include "snip/SnapshotImage.hpp"
+#include "annotation/AnnotationTypes.hpp"
 
+#include <QPointer>
 #include <QRect>
+
+#include <optional>
 
 #include <QByteArray>
 #include <QWidget>
@@ -16,6 +20,7 @@ class QResizeEvent;
 class QShowEvent;
 class QToolButton;
 class QDoubleSpinBox;
+class QPlainTextEdit;
 
 namespace lc::annotation {
 class AnnotationDocument;
@@ -62,6 +67,7 @@ class SnipOverlay final : public QWidget {
     void mouseMoveEvent(QMouseEvent* event) override;
     void mouseReleaseEvent(QMouseEvent* event) override;
     void mouseDoubleClickEvent(QMouseEvent* event) override;
+    bool eventFilter(QObject* watched, QEvent* event) override;
 
   private:
     [[nodiscard]] QPoint physicalCursor(const QMouseEvent* event) const;
@@ -70,6 +76,10 @@ class SnipOverlay final : public QWidget {
     [[nodiscard]] QTransform documentToLocalTransform() const;
     [[nodiscard]] bool hasSelection() const noexcept;
     [[nodiscard]] bool annotating() const noexcept;
+    [[nodiscard]] bool ownsToolbar() const;
+    void beginTextEditor(QPointF anchor, std::optional<annotation::AnnotationObject> original = std::nullopt);
+    void commitTextEditor();
+    void cancelTextEditor();
     void positionToolbar();
     void requestCopyIfSelected();
     void requestSaveIfSelected();
@@ -86,6 +96,7 @@ class SnipOverlay final : public QWidget {
     QToolButton* ellipseToolButton_{};
     QToolButton* arrowToolButton_{};
     QToolButton* brushToolButton_{};
+    QToolButton* textToolButton_{};
     QToolButton* colorButton_{};
     QToolButton* undoButton_{};
     QToolButton* redoButton_{};
@@ -93,6 +104,10 @@ class SnipOverlay final : public QWidget {
     QDoubleSpinBox* lineWidth_{};
     annotation::AnnotationDocument* document_{};
     annotation::AnnotationInteraction* interaction_{};
+    QPointer<QPlainTextEdit> textEditor_;
+    std::optional<annotation::AnnotationObject> textEditBefore_;
+    annotation::AnnotationStyle textEditStyle_{Qt::red, 24.0};
+    QPointF textEditAnchor_;
     QRect lockedSelection_;
     bool busy_{};
     bool dragging_{};

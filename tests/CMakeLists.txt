@@ -14,6 +14,7 @@ include(Catch)
 
 add_executable(landscapecutter_annotation_tests
     annotation/AnnotationDocumentTests.cpp
+    annotation/AnnotationTextTests.cpp
     annotation/AnnotationHistoryTests.cpp
     annotation/AnnotationInteractionTests.cpp
     annotation/AnnotationRendererTests.cpp
@@ -27,7 +28,10 @@ target_link_libraries(landscapecutter_annotation_tests PRIVATE
 
 lc_enable_warnings(landscapecutter_annotation_tests)
 
-catch_discover_tests(landscapecutter_annotation_tests)
+catch_discover_tests(landscapecutter_annotation_tests
+    PROPERTIES
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+)
 
 target_link_libraries(landscapecutter_unit_tests PRIVATE
     Catch2::Catch2WithMain

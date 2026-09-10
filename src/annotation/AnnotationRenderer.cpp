@@ -1,6 +1,8 @@
 #include "annotation/AnnotationRenderer.hpp"
 
 #include <QLineF>
+#include <QFontDatabase>
+#include <QFontMetricsF>
 #include <QPainter>
 #include <QPainterPath>
 #include <QPen>
@@ -19,6 +21,19 @@ QPen annotationPen(const AnnotationStyle& style) {
     pen.setCapStyle(Qt::RoundCap);
     pen.setJoinStyle(Qt::RoundJoin);
     return pen;
+}
+
+void drawText(QPainter& painter, const TextAnnotation& text) {
+    const QFont font = resolvedAnnotationFont(qMax(1, qRound(text.style.physicalSize)));
+    const QFontMetricsF metrics(font);
+    painter.setPen(QPen(text.style.color));
+    painter.setFont(font);
+    const QStringList lines = text.text.split(QLatin1Char('\n'), Qt::KeepEmptyParts);
+    for (qsizetype index = 0; index < lines.size(); ++index) {
+        painter.drawText(QPointF{text.anchor.x(), text.anchor.y() + metrics.ascent() +
+                                             index * metrics.lineSpacing()},
+                         lines[index]);
+    }
 }
 
 void drawObject(QPainter& painter, const AnnotationObject& object) {
@@ -53,11 +68,41 @@ void drawObject(QPainter& painter, const AnnotationObject& object) {
                     path.lineTo(payload.points[index]);
                 }
                 painter.drawPath(path);
+            } else if constexpr (std::is_same_v<Payload, TextAnnotation>) {
+                drawText(painter, payload);
             }
         },
         object.payload);
 }
 } // namespace
+
+QFont resolvedAnnotationFont(int physicalPixelSize) {
+    const QStringList candidates{QStringLiteral("Segoe UI"), QStringLiteral("Microsoft YaHei UI"),
+                                 QStringLiteral("Arial")};
+    const QStringList available = QFontDatabase::families();
+    QFont font;
+    const auto selected = std::find_if(candidates.begin(), candidates.end(),
+                                       [&available](const QString& candidate) {
+                                           return available.contains(candidate, Qt::CaseInsensitive);
+                                       });
+    if (selected != candidates.end())
+        font.setFamily(*selected);
+    else
+        font = QFontDatabase::systemFont(QFontDatabase::GeneralFont);
+    font.setPixelSize(std::max(1, physicalPixelSize));
+    font.setWeight(QFont::Normal);
+    font.setItalic(false);
+    return font;
+}
+
+QRectF textLogicalRect(const TextAnnotation& text) {
+    const QFontMetricsF metrics(resolvedAnnotationFont(qMax(1, qRound(text.style.physicalSize))));
+    const QStringList lines = text.text.split(QLatin1Char('\n'), Qt::KeepEmptyParts);
+    qreal width{};
+    for (const QString& line : lines)
+        width = std::max(width, metrics.horizontalAdvance(line));
+    return {text.anchor, QSizeF{width, metrics.lineSpacing() * std::max<qsizetype>(1, lines.size())}};
+}
 
 QPolygonF arrowHead(QPointF start, QPointF end, qreal width) {
     const QLineF shaft(start, end);

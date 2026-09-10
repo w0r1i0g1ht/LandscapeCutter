@@ -13,6 +13,7 @@
 #include <QMouseEvent>
 #include <QPainter>
 #include <QPainterPath>
+#include <QPlainTextEdit>
 #include <QResizeEvent>
 #include <QScreen>
 #include <QShowEvent>
@@ -90,6 +91,8 @@ SnipOverlay::SnipOverlay(FrozenMonitor monitor, SelectionModel& selection, QWidg
         addTool(QStringLiteral("arrowToolButton"), tr("箭头"), annotation::AnnotationTool::Arrow);
     brushToolButton_ = addTool(QStringLiteral("brushToolButton"), tr("画笔"),
                                annotation::AnnotationTool::Freehand);
+    textToolButton_ = addTool(QStringLiteral("textToolButton"), tr("文字"),
+                              annotation::AnnotationTool::Text);
     colorButton_ = new QToolButton(toolbar_);
     colorButton_->setObjectName(QStringLiteral("colorButton"));
     colorButton_->setText(tr("颜色"));
@@ -166,7 +169,7 @@ void SnipOverlay::refresh() {
     copyButton_->setEnabled((selected || annotationActive) && !busy_);
     saveButton_->setEnabled((selected || annotationActive) && !busy_);
     cancelButton_->setEnabled(true);
-    const bool ownToolbar = toolbarHostAssigned_ ? toolbarHost_ : selectedOnThisMonitor;
+    const bool ownToolbar = ownsToolbar();
     toolbar_->setVisible((selected || annotationActive) && ownToolbar);
     const bool toolPickerAvailable = selected || annotationActive;
     selectToolButton_->setVisible(toolPickerAvailable);
@@ -174,6 +177,7 @@ void SnipOverlay::refresh() {
     ellipseToolButton_->setVisible(toolPickerAvailable);
     arrowToolButton_->setVisible(toolPickerAvailable);
     brushToolButton_->setVisible(toolPickerAvailable);
+    textToolButton_->setVisible(toolPickerAvailable);
     colorButton_->setVisible(annotationActive);
     lineWidth_->setVisible(annotationActive);
     undoButton_->setVisible(annotationActive);
@@ -192,6 +196,8 @@ void SnipOverlay::refresh() {
 void SnipOverlay::setAnnotationContext(annotation::AnnotationDocument* document,
                                        annotation::AnnotationInteraction* interaction,
                                        QRect lockedSelection) {
+    if (document_ != document || interaction_ != interaction)
+        cancelTextEditor();
     document_ = document;
     interaction_ = interaction;
     lockedSelection_ = lockedSelection;
@@ -199,6 +205,7 @@ void SnipOverlay::setAnnotationContext(annotation::AnnotationDocument* document,
 }
 
 void SnipOverlay::clearAnnotationContext() {
+    cancelTextEditor();
     document_ = nullptr;
     interaction_ = nullptr;
     lockedSelection_ = {};
@@ -218,6 +225,8 @@ void SnipOverlay::setBusy(bool busy) {
 void SnipOverlay::setToolbarHost(const bool toolbarHost) {
     toolbarHostAssigned_ = true;
     toolbarHost_ = toolbarHost;
+    if (!ownsToolbar())
+        cancelTextEditor();
     refresh();
 }
 
@@ -376,6 +385,18 @@ void SnipOverlay::mousePressEvent(QMouseEvent* event) {
         return;
     }
 
+    if (annotating() && textEditor_) {
+        event->accept();
+        return;
+    }
+
+    if (annotating() && interaction_->tool() == annotation::AnnotationTool::Text) {
+        if (ownsToolbar())
+            beginTextEditor(annotationPoint(event));
+        event->accept();
+        return;
+    }
+
     if (annotating()) {
         interaction_->press(annotationPoint(event));
         dragging_ = true;
@@ -448,6 +469,20 @@ void SnipOverlay::mouseReleaseEvent(QMouseEvent* event) {
 }
 
 void SnipOverlay::mouseDoubleClickEvent(QMouseEvent* event) {
+    if (annotating() && !busy_ && event->button() == Qt::LeftButton && ownsToolbar() && !textEditor_) {
+        const auto hit = interaction_->hitTest(annotationPoint(event));
+        if (hit.has_value()) {
+            const auto found = std::find_if(document_->objects().begin(), document_->objects().end(),
+                                            [hit](const auto& object) { return object.id == *hit; });
+            if (found != document_->objects().end() &&
+                std::holds_alternative<annotation::TextAnnotation>(found->payload)) {
+                const auto& text = std::get<annotation::TextAnnotation>(found->payload);
+                beginTextEditor(text.anchor, *found);
+                event->accept();
+                return;
+            }
+        }
+    }
     if (!annotating() && !busy_ && event->button() == Qt::LeftButton && hasSelection()) {
         const auto point = physicalCursor(event);
         const auto rectangle = selection_.rect();
@@ -515,6 +550,85 @@ bool SnipOverlay::hasSelection() const noexcept {
 
 bool SnipOverlay::annotating() const noexcept {
     return document_ != nullptr && interaction_ != nullptr && !lockedSelection_.isEmpty();
+}
+
+bool SnipOverlay::ownsToolbar() const {
+    return toolbarHostAssigned_
+               ? toolbarHost_
+               : (hasSelection() && selectionInLocalCoordinates().intersects(localMonitorRect(size())));
+}
+
+void SnipOverlay::beginTextEditor(QPointF anchor,
+                                  std::optional<annotation::AnnotationObject> original) {
+    if (!annotating() || !ownsToolbar() || textEditor_)
+        return;
+    textEditBefore_ = std::move(original);
+    textEditAnchor_ = anchor;
+    textEditStyle_ = textEditBefore_.has_value()
+                         ? std::get<annotation::TextAnnotation>(textEditBefore_->payload).style
+                         : annotation::AnnotationStyle{interaction_->style().color, 24.0};
+    auto* editor = new QPlainTextEdit(this);
+    textEditor_ = editor;
+    editor->setObjectName(QStringLiteral("annotationTextEditor"));
+    editor->setLineWrapMode(QPlainTextEdit::NoWrap);
+    editor->setFont(annotation::resolvedAnnotationFont(qMax(1, qRound(textEditStyle_.physicalSize))));
+    editor->setPlainText(textEditBefore_.has_value()
+                             ? std::get<annotation::TextAnnotation>(textEditBefore_->payload).text
+                             : QString{});
+    editor->installEventFilter(this);
+    const QPointF localAnchor = documentToLocalTransform().map(anchor);
+    editor->move(qRound(localAnchor.x()), qRound(localAnchor.y()));
+    editor->resize(240, qMax(40, editor->fontMetrics().lineSpacing() * 2));
+    editor->show();
+    editor->setFocus(Qt::OtherFocusReason);
+    editor->raise();
+}
+
+void SnipOverlay::commitTextEditor() {
+    if (!textEditor_ || !document_)
+        return;
+    const QString text = textEditor_->toPlainText();
+    if (textEditBefore_.has_value()) {
+        auto replacement = *textEditBefore_;
+        auto& annotation = std::get<annotation::TextAnnotation>(replacement.payload);
+        annotation.text = text;
+        static_cast<void>(document_->replaceObject(std::move(replacement)));
+    } else {
+        static_cast<void>(document_->addObject(annotation::TextAnnotation{textEditAnchor_, text, textEditStyle_}));
+    }
+    cancelTextEditor();
+    emit annotationChanged();
+    refresh();
+}
+
+void SnipOverlay::cancelTextEditor() {
+    if (textEditor_) {
+        auto* editor = textEditor_.data();
+        textEditor_.clear();
+        editor->removeEventFilter(this);
+        delete editor;
+    }
+    textEditBefore_.reset();
+}
+
+bool SnipOverlay::eventFilter(QObject* watched, QEvent* event) {
+    if (watched == textEditor_ && event->type() == QEvent::KeyPress) {
+        auto* key = static_cast<QKeyEvent*>(event);
+        if ((key->key() == Qt::Key_Return || key->key() == Qt::Key_Enter) &&
+            key->modifiers().testFlag(Qt::ControlModifier)) {
+            commitTextEditor();
+            return true;
+        }
+        if (key->key() == Qt::Key_Escape) {
+            cancelTextEditor();
+            emit annotationChanged();
+            refresh();
+            return true;
+        }
+        if (key->key() == Qt::Key_S && key->modifiers().testFlag(Qt::ControlModifier))
+            return true;
+    }
+    return QWidget::eventFilter(watched, event);
 }
 
 void SnipOverlay::positionToolbar() {
