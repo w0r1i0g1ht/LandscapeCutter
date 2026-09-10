@@ -36,10 +36,12 @@ void drawObject(QPainter& painter, const AnnotationObject& object) {
             } else if constexpr (std::is_same_v<Payload, ArrowAnnotation>) {
                 painter.setPen(annotationPen(payload.style));
                 painter.setBrush(Qt::NoBrush);
-                painter.drawLine(payload.start, payload.end);
                 const auto head = arrowHead(payload.start, payload.end, payload.style.physicalSize);
-                painter.drawLine(head[0], head[1]);
-                painter.drawLine(head[0], head[2]);
+                if (head.size() == 3) {
+                    painter.drawLine(payload.start, payload.end);
+                    painter.drawLine(head[0], head[1]);
+                    painter.drawLine(head[0], head[2]);
+                }
             } else if constexpr (std::is_same_v<Payload, FreehandAnnotation>) {
                 if (payload.points.size() < 2) {
                     return;
@@ -61,7 +63,7 @@ QPolygonF arrowHead(QPointF start, QPointF end, qreal width) {
     const QLineF shaft(start, end);
     const auto shaftLength = shaft.length();
     if (shaftLength <= 0.0) {
-        return {end};
+        return {};
     }
 
     const auto headLength = std::min(std::max<qreal>(8.0, 4.0 * width), 0.4 * shaftLength);

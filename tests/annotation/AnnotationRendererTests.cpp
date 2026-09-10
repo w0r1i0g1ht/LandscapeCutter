@@ -89,6 +89,12 @@ TEST_CASE("annotation arrow head follows the fixed physical-pixel formula") {
     CHECK(layer.pixelColor(qRound(baseQuarter.x()), qRound(baseQuarter.y())).alpha() < 64);
 }
 
+TEST_CASE("annotation renderer safely ignores a zero-length arrow in a manual snapshot") {
+    const auto snapshot = snapshotWith({{{1, ArrowAnnotation{{24, 20}, {24, 20}, {Qt::red, 3.0}}}}});
+    const auto layer = transparentAnnotationLayer(snapshot);
+    CHECK(alphaBounds(layer).isEmpty());
+}
+
 TEST_CASE("annotation renderer draws fixed-image bounds, round strokes, and creation order") {
     const auto snapshot = snapshotWith({
         {1, RectangleAnnotation{{8, 8, 20, 12}, {Qt::red, 3.0}}},
