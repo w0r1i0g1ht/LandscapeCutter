@@ -60,6 +60,7 @@ void SnipSession::cancel() {
     }
     // Defer deletion so a button/key event can return to its sender safely.
     for (auto& overlay : overlays_) {
+        overlay->clearAnnotationContext();
         overlay->hide();
         overlay.release()->deleteLater();
     }

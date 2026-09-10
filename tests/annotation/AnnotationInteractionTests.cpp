@@ -157,4 +157,75 @@ TEST_CASE("annotation interaction cancel draft restores the committed document")
     CHECK_FALSE(interaction.draft().has_value());
     CHECK(value.objects().empty());
 }
+
+TEST_CASE("annotation interaction moves freehand paths rigidly against every boundary") {
+    auto value = document();
+    const auto horizontal = value.addObject(FreehandAnnotation{{{0, 5}, {10, 5}}, {Qt::black, 3}});
+    const auto vertical = value.addObject(FreehandAnnotation{{{30, 20}, {30, 29}}, {Qt::black, 3}});
+    REQUIRE(horizontal.has_value());
+    REQUIRE(vertical.has_value());
+    AnnotationInteraction interaction(value);
+    interaction.setTool(AnnotationTool::Select);
+
+    interaction.press({5, 5});
+    interaction.release({-20, -20});
+    const auto& movedHorizontal = std::get<FreehandAnnotation>(value.objects()[0].payload).points;
+    CHECK(movedHorizontal[0] == QPointF(0, 0));
+    CHECK(movedHorizontal[1] == QPointF(10, 0));
+
+    interaction.press({30, 24});
+    interaction.release({80, 80});
+    const auto& movedVertical = std::get<FreehandAnnotation>(value.objects()[1].payload).points;
+    CHECK(movedVertical[0] == QPointF(40, 21));
+    CHECK(movedVertical[1] == QPointF(40, 30));
+}
+
+TEST_CASE("annotation interaction chooses the nearest overlapping handle") {
+    const auto resize = [](QPointF handle, QPointF destination) {
+        auto value = document();
+        REQUIRE(value.addObject(RectangleAnnotation{{10, 10, 4, 4}, {Qt::red, 3}}).has_value());
+        AnnotationInteraction interaction(value);
+        interaction.setTool(AnnotationTool::Select);
+        interaction.press(handle);
+        interaction.release(destination);
+        return std::get<RectangleAnnotation>(value.objects().front().payload).rect;
+    };
+
+    CHECK(resize({10, 10}, {6, 6}) == QRectF(6, 6, 8, 8));
+    CHECK(resize({14, 10}, {18, 6}) == QRectF(10, 6, 8, 8));
+    CHECK(resize({10, 14}, {6, 18}) == QRectF(6, 10, 8, 8));
+    CHECK(resize({14, 14}, {18, 18}) == QRectF(10, 10, 8, 8));
+
+    auto value = document();
+    REQUIRE(value.addObject(ArrowAnnotation{{20, 10}, {23, 10}, {Qt::blue, 3}}).has_value());
+    AnnotationInteraction interaction(value);
+    interaction.setTool(AnnotationTool::Select);
+    interaction.press({23, 10});
+    interaction.release({30, 12});
+    auto arrow = std::get<ArrowAnnotation>(value.objects().front().payload);
+    CHECK(arrow.start == QPointF(20, 10));
+    CHECK(arrow.end == QPointF(30, 12));
+
+    interaction.press({20, 10});
+    interaction.release({12, 8});
+    arrow = std::get<ArrowAnnotation>(value.objects().front().payload);
+    CHECK(arrow.start == QPointF(12, 8));
+    CHECK(arrow.end == QPointF(30, 12));
+}
+
+TEST_CASE("annotation interaction isolates full-box hits and exact line tolerance") {
+    auto value = document();
+    const auto rectangle = value.addObject(RectangleAnnotation{{5, 5, 10, 8}, {Qt::red, 3}});
+    const auto ellipse = value.addObject(EllipseAnnotation{{20, 5, 10, 8}, {Qt::blue, 3}});
+    const auto arrow = value.addObject(ArrowAnnotation{{5, 22}, {35, 22}, {Qt::black, 6}});
+    REQUIRE(rectangle.has_value());
+    REQUIRE(ellipse.has_value());
+    REQUIRE(arrow.has_value());
+    AnnotationInteraction interaction(value);
+
+    CHECK(interaction.hitTest({6, 6}) == rectangle);
+    CHECK(interaction.hitTest({28, 11}) == ellipse);
+    CHECK(interaction.hitTest({20, 28}) == arrow);
+    CHECK_FALSE(interaction.hitTest({20, 28.01}).has_value());
+}
 } // namespace

@@ -3,6 +3,7 @@
 #include <QLineF>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <type_traits>
 
@@ -40,10 +41,19 @@ QRectF payloadBounds(const AnnotationPayload& payload) {
             } else if constexpr (std::is_same_v<Value, ArrowAnnotation>) {
                 return QRectF(value.start, value.end).normalized();
             } else if constexpr (std::is_same_v<Value, FreehandAnnotation>) {
-                QRectF result;
-                for (const auto& point : value.points)
-                    result |= QRectF(point, QSizeF{});
-                return result;
+                if (value.points.empty())
+                    return {};
+                qreal minimumX = value.points.front().x();
+                qreal maximumX = minimumX;
+                qreal minimumY = value.points.front().y();
+                qreal maximumY = minimumY;
+                for (const auto& point : value.points) {
+                    minimumX = std::min(minimumX, point.x());
+                    maximumX = std::max(maximumX, point.x());
+                    minimumY = std::min(minimumY, point.y());
+                    maximumY = std::max(maximumY, point.y());
+                }
+                return {minimumX, minimumY, maximumX - minimumX, maximumY - minimumY};
             } else {
                 return QRectF(value.anchor, QSizeF{});
             }
@@ -313,22 +323,29 @@ AnnotationInteraction::EditMode AnnotationInteraction::editModeFor(const Annotat
             if constexpr (std::is_same_v<Value, RectangleAnnotation> ||
                           std::is_same_v<Value, EllipseAnnotation>) {
                 const auto rect = value.rect.normalized();
-                if (QLineF(point, rect.topLeft()).length() <= kHandleTolerance)
-                    return EditMode::ResizeTopLeft;
-                if (QLineF(point, rect.topRight()).length() <= kHandleTolerance)
-                    return EditMode::ResizeTopRight;
-                if (QLineF(point, rect.bottomLeft()).length() <= kHandleTolerance)
-                    return EditMode::ResizeBottomLeft;
-                if (QLineF(point, rect.bottomRight()).length() <= kHandleTolerance)
-                    return EditMode::ResizeBottomRight;
-                return EditMode::Move;
+                const std::array handles{
+                    std::pair{EditMode::ResizeTopLeft, rect.topLeft()},
+                    std::pair{EditMode::ResizeTopRight, rect.topRight()},
+                    std::pair{EditMode::ResizeBottomLeft, rect.bottomLeft()},
+                    std::pair{EditMode::ResizeBottomRight, rect.bottomRight()},
+                };
+                auto nearest = EditMode::Move;
+                auto nearestDistance = kHandleTolerance;
+                for (const auto& [mode, handle] : handles) {
+                    const auto distance = QLineF(point, handle).length();
+                    if (distance <= nearestDistance) {
+                        nearest = mode;
+                        nearestDistance = distance;
+                    }
+                }
+                return nearest;
             } else if constexpr (std::is_same_v<Value, ArrowAnnotation>) {
                 const auto tolerance = lineTolerance(value.style);
-                if (QLineF(point, value.start).length() <= tolerance)
-                    return EditMode::ArrowStart;
-                if (QLineF(point, value.end).length() <= tolerance)
-                    return EditMode::ArrowEnd;
-                return EditMode::Move;
+                const auto startDistance = QLineF(point, value.start).length();
+                const auto endDistance = QLineF(point, value.end).length();
+                if (startDistance > tolerance && endDistance > tolerance)
+                    return EditMode::Move;
+                return startDistance <= endDistance ? EditMode::ArrowStart : EditMode::ArrowEnd;
             }
             return EditMode::Move;
         },

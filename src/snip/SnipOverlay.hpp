@@ -37,6 +37,7 @@ class SnipOverlay final : public QWidget {
     void setAnnotationContext(annotation::AnnotationDocument* document,
                               annotation::AnnotationInteraction* interaction,
                               QRect lockedSelection);
+    void clearAnnotationContext();
 
   signals:
     void selectionChanged();

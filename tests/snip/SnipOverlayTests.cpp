@@ -269,4 +269,67 @@ TEST_CASE("annotation overlay clips one shared preview across monitor boundaries
     CHECK(leftPreview.pixelColor(19, 18) == QColor(Qt::white));
     CHECK(rightPreview.pixelColor(0, 18) == QColor(Qt::white));
 }
+
+TEST_CASE("annotation overlay replaces a moved draft in every shared preview") {
+    ApplicationFixture fixture;
+    SelectionModel selection;
+    selection.setBounds({0, 0, 40, 20});
+    auto document = annotationDocument({40, 20});
+    REQUIRE(document.addObject(RectangleAnnotation{{4, 5, 12, 8}, {Qt::red, 1}}).has_value());
+    AnnotationInteraction interaction(document);
+    interaction.setTool(AnnotationTool::Select);
+    interaction.press({10, 9});
+    interaction.move({20, 9});
+    REQUIRE(interaction.draft().has_value());
+
+    QImage image({20, 20}, QImage::Format_RGB32);
+    image.fill(Qt::white);
+    SnipOverlay left{{{0, 0, 20, 20}, image}, selection};
+    SnipOverlay right{{{20, 0, 20, 20}, image}, selection};
+    left.setToolbarHost(false);
+    right.setToolbarHost(false);
+    left.setAnnotationContext(&document, &interaction, {0, 0, 40, 20});
+    right.setAnnotationContext(&document, &interaction, {0, 0, 40, 20});
+    QImage leftPreview({20, 20}, QImage::Format_RGB32);
+    leftPreview.fill(Qt::white);
+    QImage rightPreview({20, 20}, QImage::Format_RGB32);
+    rightPreview.fill(Qt::white);
+    QPainter leftPainter(&leftPreview);
+    left.render(&leftPainter);
+    leftPainter.end();
+    QPainter rightPainter(&rightPreview);
+    right.render(&rightPainter);
+    rightPainter.end();
+
+    CHECK(leftPreview.pixelColor(4, 5) == QColor(Qt::white));
+    CHECK(leftPreview.pixelColor(14, 5) != QColor(Qt::white));
+    CHECK(rightPreview.pixelColor(6, 5) != QColor(Qt::white));
+}
+
+TEST_CASE("annotation toolbar copy and save requests stay available without export wiring") {
+    ApplicationFixture fixture;
+    SelectionModel selection;
+    selection.setBounds({0, 0, 40, 30});
+    auto document = annotationDocument();
+    AnnotationInteraction interaction(document);
+    SnipOverlay overlay{frozenMonitor(), selection};
+    overlay.setToolbarHost(true);
+    overlay.setAnnotationContext(&document, &interaction, {-40, 10, 40, 30});
+    auto* copy = overlay.findChild<QToolButton*>("copyButton");
+    auto* save = overlay.findChild<QToolButton*>("saveButton");
+    REQUIRE(copy != nullptr);
+    REQUIRE(save != nullptr);
+    CHECK(copy->isEnabled());
+    CHECK(save->isEnabled());
+    int copies{};
+    int saves{};
+    QObject::connect(&overlay, &SnipOverlay::copyRequested, [&copies] { ++copies; });
+    QObject::connect(&overlay, &SnipOverlay::saveRequested, [&saves] { ++saves; });
+
+    copy->click();
+    save->click();
+
+    CHECK(copies == 1);
+    CHECK(saves == 1);
+}
 } // namespace

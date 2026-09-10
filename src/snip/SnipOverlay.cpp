@@ -198,6 +198,13 @@ void SnipOverlay::setAnnotationContext(annotation::AnnotationDocument* document,
     refresh();
 }
 
+void SnipOverlay::clearAnnotationContext() {
+    document_ = nullptr;
+    interaction_ = nullptr;
+    lockedSelection_ = {};
+    refresh();
+}
+
 void SnipOverlay::setBusy(bool busy) {
     busy_ = busy;
     if (busy_ && dragging_) {
@@ -221,8 +228,16 @@ void SnipOverlay::paintEvent(QPaintEvent* event) {
 
     if (annotating()) {
         auto snapshot = document_->snapshot();
-        if (const auto currentDraft = interaction_->draft(); currentDraft.has_value())
-            snapshot.objects.push_back(*currentDraft);
+        if (const auto currentDraft = interaction_->draft(); currentDraft.has_value()) {
+            const auto committed = std::find_if(
+                snapshot.objects.begin(), snapshot.objects.end(), [currentDraft](const auto& object) {
+                    return currentDraft->id != 0 && object.id == currentDraft->id;
+                });
+            if (committed == snapshot.objects.end())
+                snapshot.objects.push_back(*currentDraft);
+            else
+                *committed = *currentDraft;
+        }
         annotation::drawAnnotations(painter, snapshot, documentToLocalTransform(),
                                     localMonitorRect(size()));
         return;

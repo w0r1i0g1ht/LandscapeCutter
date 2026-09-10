@@ -4,6 +4,7 @@
 #include <QClipboard>
 #include <QElapsedTimer>
 #include <QMouseEvent>
+#include <QPainter>
 #include <QTemporaryDir>
 #include <QThread>
 #include <QToolButton>
@@ -589,5 +590,74 @@ TEST_CASE("annotation session shares one interaction across overlay input") {
     CHECK(undo->isEnabled());
     CHECK_FALSE(redo->isEnabled());
     CHECK_FALSE(remove->isEnabled());
+    session.cancel();
+}
+
+TEST_CASE("annotation cancellation clears deferred overlay contexts before destroying the document") {
+    int argc = 1;
+    char name[] = "annotation-cancel-overlay-context-test";
+    char* argv[] = {name, nullptr};
+    QApplication app(argc, argv);
+    SessionService service;
+    SessionRecovery recovery;
+    lc::snip::SnapshotBatch batch(service, recovery, {});
+    ControlledPreparation preparation;
+    lc::snip::SnipSession session(batch, preparation.function());
+    lc::platform::windows::MonitorDescriptor monitor{};
+    monitor.desktopRect = {0, 0, 20, 15};
+    monitor.catalogGeneration = 1;
+    session.begin({monitor});
+    batch.ready({{{0, 0, 20, 15}, annotationTestImage()}});
+    selectRect(session);
+    session.beginAnnotation(lc::annotation::AnnotationTool::Rectangle);
+    preparation.complete(QImage(10, 7, QImage::Format_RGB32));
+    app.processEvents();
+    const auto overlays = activeOverlays();
+    REQUIRE(overlays.size() == 1);
+    auto* deferredOverlay = overlays.front();
+
+    session.cancel();
+    CHECK_NOTHROW(deferredOverlay->refresh());
+    QImage preview(20, 15, QImage::Format_RGB32);
+    QPainter painter(&preview);
+    CHECK_NOTHROW(deferredOverlay->render(&painter));
+    painter.end();
+    app.processEvents();
+}
+
+TEST_CASE("annotating across monitors keeps one toolbar host while a draft is live") {
+    int argc = 1;
+    char name[] = "annotation-live-draft-toolbar-test";
+    char* argv[] = {name, nullptr};
+    QApplication app(argc, argv);
+    SessionService service;
+    SessionRecovery recovery;
+    lc::snip::SnapshotBatch batch(service, recovery, {});
+    ControlledPreparation preparation;
+    lc::snip::SnipSession session(batch, preparation.function());
+    lc::platform::windows::MonitorDescriptor left{}, right{};
+    left.desktopRect = {0, 0, 20, 20};
+    left.catalogGeneration = 1;
+    right.desktopRect = {20, 0, 40, 20};
+    right.catalogGeneration = 1;
+    session.begin({left, right});
+    QImage image(20, 20, QImage::Format_RGB32);
+    image.fill(Qt::white);
+    batch.ready({{{0, 0, 20, 20}, image}, {{20, 0, 20, 20}, image}});
+    session.selection().press({5, 5}, 0);
+    session.selection().move({35, 15});
+    session.selection().release();
+    auto overlays = activeOverlays();
+    REQUIRE(overlays.size() == 2);
+    overlays.front()->selectionChanged();
+    session.beginAnnotation(lc::annotation::AnnotationTool::Rectangle);
+    preparation.complete(QImage(30, 10, QImage::Format_RGB32));
+    app.processEvents();
+    REQUIRE(session.interaction() != nullptr);
+    session.interaction()->press({4, 4});
+    REQUIRE(session.interaction()->hasDraft());
+    overlays.front()->annotationChanged();
+
+    CHECK(visibleToolbarCount(overlays) == 1);
     session.cancel();
 }
