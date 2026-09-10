@@ -20,6 +20,10 @@ SnipSession::SnipSession(SnapshotBatch& batch, QObject* parent) : QObject(parent
         emit errorOccurred(app::formatCaptureNotice({.code = code}));
     });
 }
+SnipSession::SnipSession(SnapshotBatch& batch, PrepareAnnotation preparation, QObject* parent)
+    : SnipSession(batch, parent) {
+    preparation_ = std::move(preparation);
+}
 SnipSession::~SnipSession() {
     cancel();
     workers_.waitForDone();
@@ -30,6 +34,7 @@ void SnipSession::begin(std::vector<platform::windows::MonitorDescriptor> monito
     cancellation_ = std::make_shared<std::atomic_bool>(false);
     active_ = true;
     preparing_ = true;
+    state_ = SnipSessionState::PreparingCapture;
     ++id_;
     batch_.start(std::move(monitors));
 }
@@ -39,6 +44,7 @@ void SnipSession::cancel() {
     active_ = false;
     preparing_ = false;
     busy_ = false;
+    state_ = SnipSessionState::Idle;
     ++id_;
     batch_.cancel();
     if (dialog_) {
@@ -54,6 +60,7 @@ void SnipSession::cancel() {
     overlays_.clear();
     images_.clear();
     selection_.clear();
+    document_.reset();
 }
 void SnipSession::open(std::vector<FrozenMonitor> images) {
     if (!active_ || !preparing_)
@@ -63,6 +70,7 @@ void SnipSession::open(std::vector<FrozenMonitor> images) {
         return;
     }
     preparing_ = false;
+    state_ = SnipSessionState::Selecting;
     images_ = std::move(images);
     QRect bounds;
     for (const auto& image : images_)
@@ -102,13 +110,16 @@ void SnipSession::setBusy(bool busy) {
         overlay->setBusy(busy);
 }
 void SnipSession::copy() {
-    if (active_ && !busy_ && !preparing_ && !selection_.rect().isEmpty())
+    if (active_ && state_ == SnipSessionState::Selecting && !busy_ && !preparing_ &&
+        !selection_.rect().isEmpty())
         exportImage();
 }
 void SnipSession::save() {
-    if (!active_ || busy_ || preparing_ || selection_.rect().isEmpty())
+    if (!active_ || state_ != SnipSessionState::Selecting || busy_ || preparing_ ||
+        selection_.rect().isEmpty())
         return;
     setBusy(true);
+    state_ = SnipSessionState::ChoosingSavePath;
     auto* dialog = new QFileDialog(overlays_.front().get(), QStringLiteral("保存截图"));
     dialog_ = dialog;
     dialog->setAttribute(Qt::WA_DeleteOnClose);
@@ -131,8 +142,10 @@ void SnipSession::save() {
     });
     connect(dialog, &QFileDialog::rejected, this, [this] {
         dialog_ = nullptr;
-        if (active_)
+        if (active_) {
+            state_ = SnipSessionState::Selecting;
             setBusy(false);
+        }
     });
     connect(dialog, &QFileDialog::accepted, this, [this, dialog] {
         dialog_ = nullptr;
@@ -140,6 +153,7 @@ void SnipSession::save() {
             return;
         const auto files = dialog->selectedFiles();
         if (files.isEmpty()) {
+            state_ = SnipSessionState::Selecting;
             setBusy(false);
             return;
         }
@@ -151,6 +165,7 @@ void SnipSession::save() {
         else if (suffix == "jpg" || suffix == "jpeg")
             format = "jpeg";
         else {
+            state_ = SnipSessionState::Selecting;
             setBusy(false);
             emit errorOccurred(QStringLiteral("请使用 .png、.jpg 或 .jpeg 文件扩展名。"));
             return;
@@ -161,6 +176,7 @@ void SnipSession::save() {
 }
 void SnipSession::exportImage(QString path, QByteArray format) {
     setBusy(true);
+    state_ = SnipSessionState::ExportingFromSelection;
     const auto requestId = id_;
     const auto rect = selection_.rect();
     const auto images = images_;
@@ -184,6 +200,7 @@ void SnipSession::exportImage(QString path, QByteArray format) {
                 if (!active_ || requestId != id_)
                     return;
                 if (!error.isEmpty()) {
+                    state_ = SnipSessionState::Selecting;
                     setBusy(false);
                     emit errorOccurred(error);
                     return;
@@ -194,5 +211,52 @@ void SnipSession::exportImage(QString path, QByteArray format) {
             },
             Qt::QueuedConnection);
     });
+}
+
+void SnipSession::beginAnnotation(annotation::AnnotationTool tool) {
+    if (!active_ || state_ != SnipSessionState::Selecting || busy_ || selection_.rect().isEmpty())
+        return;
+
+    tool_ = tool;
+    const auto requestId = id_;
+    const auto lockedSelection = selection_.rect();
+    const auto images = images_;
+    const auto cancellation = cancellation_;
+    state_ = SnipSessionState::PreparingAnnotation;
+    setBusy(true);
+    const QPointer<SnipSession> session(this);
+    const auto complete = [session, requestId](QImage image) {
+        if (!session)
+            return;
+        QMetaObject::invokeMethod(session, [session, requestId, image = std::move(image)]() mutable {
+            if (session)
+                session->annotationPrepared(requestId, std::move(image));
+        }, Qt::QueuedConnection);
+    };
+    if (preparation_) {
+        preparation_(images, lockedSelection, cancellation, complete);
+        return;
+    }
+    workers_.start([images, lockedSelection, cancellation, complete] {
+        prepareAnnotation(images, lockedSelection, cancellation, complete);
+    });
+}
+
+void SnipSession::annotationPrepared(std::uint64_t requestId, QImage image) {
+    if (!active_ || requestId != id_ || state_ != SnipSessionState::PreparingAnnotation ||
+        !cancellation_ || cancellation_->load(std::memory_order_acquire))
+        return;
+    if (image.isNull()) {
+        state_ = SnipSessionState::Selecting;
+        setBusy(false);
+        emit errorOccurred(QStringLiteral("选区没有有效画面，或图像过大。"));
+        return;
+    }
+    document_ = std::make_unique<annotation::AnnotationDocument>(std::move(image));
+    selection_.release();
+    state_ = SnipSessionState::Annotating;
+    setBusy(false);
+    for (auto& overlay : overlays_)
+        overlay->refresh();
 }
 } // namespace lc::snip
