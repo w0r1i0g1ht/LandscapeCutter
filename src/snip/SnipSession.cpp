@@ -66,6 +66,7 @@ void SnipSession::cancel() {
     overlays_.clear();
     images_.clear();
     selection_.clear();
+    interaction_.reset();
     document_.reset();
 }
 void SnipSession::open(std::vector<FrozenMonitor> images) {
@@ -97,6 +98,38 @@ void SnipSession::open(std::vector<FrozenMonitor> images) {
         connect(overlay.get(), &SnipOverlay::copyRequested, this, &SnipSession::copy);
         connect(overlay.get(), &SnipOverlay::saveRequested, this, &SnipSession::save);
         connect(overlay.get(), &SnipOverlay::cancelRequested, this, &SnipSession::cancel);
+        connect(overlay.get(), &SnipOverlay::annotationToolRequested, this,
+                [this](annotation::AnnotationTool tool) {
+                    if (state_ == SnipSessionState::Selecting) {
+                        beginAnnotation(tool);
+                    } else if (state_ == SnipSessionState::Annotating && interaction_) {
+                        interaction_->setTool(tool);
+                        for (auto& window : overlays_)
+                            window->refresh();
+                    }
+                });
+        connect(overlay.get(), &SnipOverlay::annotationChanged, this, [this] {
+            for (auto& window : overlays_)
+                window->refresh();
+        });
+        connect(overlay.get(), &SnipOverlay::annotationUndoRequested, this, [this] {
+            if (state_ == SnipSessionState::Annotating && document_ && document_->undo()) {
+                for (auto& window : overlays_)
+                    window->refresh();
+            }
+        });
+        connect(overlay.get(), &SnipOverlay::annotationRedoRequested, this, [this] {
+            if (state_ == SnipSessionState::Annotating && document_ && document_->redo()) {
+                for (auto& window : overlays_)
+                    window->refresh();
+            }
+        });
+        connect(overlay.get(), &SnipOverlay::annotationDeleteRequested, this, [this] {
+            if (state_ == SnipSessionState::Annotating && interaction_ && interaction_->deleteSelection()) {
+                for (auto& window : overlays_)
+                    window->refresh();
+            }
+        });
         connect(overlay.get(), &SnipOverlay::displayInvalidated, this, &SnipSession::cancel,
                 Qt::QueuedConnection);
         overlays_.push_back(std::move(overlay));
@@ -295,12 +328,14 @@ void SnipSession::annotationPrepared(std::uint64_t sessionRequestId,
         return;
     }
     document_ = std::make_unique<annotation::AnnotationDocument>(std::move(image));
+    interaction_ = std::make_unique<annotation::AnnotationInteraction>(*document_);
+    interaction_->setTool(tool_);
     invalidateAnnotationPreparation(false);
     selection_.release();
     state_ = SnipSessionState::Annotating;
     setBusy(false);
     for (auto& overlay : overlays_)
-        overlay->refresh();
+        overlay->setAnnotationContext(document_.get(), interaction_.get(), lockedSelection_);
 }
 
 void SnipSession::invalidateAnnotationPreparation(bool clearSelection) noexcept {

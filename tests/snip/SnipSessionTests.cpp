@@ -3,8 +3,10 @@
 #include <QApplication>
 #include <QClipboard>
 #include <QElapsedTimer>
+#include <QMouseEvent>
 #include <QTemporaryDir>
 #include <QThread>
+#include <QToolButton>
 #include <algorithm>
 #include <catch2/catch_test_macros.hpp>
 namespace {
@@ -486,5 +488,106 @@ TEST_CASE("a selection in a monitor gap keeps one toolbar available") {
     app.processEvents();
 
     CHECK(visibleToolbarCount(overlays) == 1);
+    session.cancel();
+}
+
+TEST_CASE("annotation toolbar tools begin preparation from selecting") {
+    int argc = 1;
+    char name[] = "annotation-toolbar-start-test";
+    char* argv[] = {name, nullptr};
+    QApplication app(argc, argv);
+    SessionService service;
+    SessionRecovery recovery;
+    lc::snip::SnapshotBatch batch(service, recovery, {});
+    ControlledPreparation preparation;
+    lc::snip::SnipSession session(batch, preparation.function());
+    lc::platform::windows::MonitorDescriptor monitor{};
+    monitor.desktopRect = {0, 0, 20, 15};
+    monitor.catalogGeneration = 1;
+    session.begin({monitor});
+    batch.ready({{{0, 0, 20, 15}, annotationTestImage()}});
+    selectRect(session);
+    const auto overlays = activeOverlays();
+    REQUIRE(overlays.size() == 1);
+    overlays.front()->selectionChanged();
+    app.processEvents();
+    auto* rectangle = overlays.front()->findChild<QToolButton*>("rectangleToolButton");
+    REQUIRE(rectangle != nullptr);
+    CHECK(rectangle->isVisible());
+
+    rectangle->click();
+
+    CHECK(session.state() == lc::snip::SnipSessionState::PreparingAnnotation);
+    CHECK(preparation.lockedSelection == QRect(2, 3, 10, 7));
+    session.cancel();
+}
+
+TEST_CASE("annotation session shares one interaction across overlay input") {
+    int argc = 1;
+    char name[] = "annotation-shared-interaction-test";
+    char* argv[] = {name, nullptr};
+    QApplication app(argc, argv);
+    SessionService service;
+    SessionRecovery recovery;
+    lc::snip::SnapshotBatch batch(service, recovery, {});
+    ControlledPreparation preparation;
+    lc::snip::SnipSession session(batch, preparation.function());
+    lc::platform::windows::MonitorDescriptor monitor{};
+    monitor.desktopRect = {0, 0, 20, 15};
+    monitor.catalogGeneration = 1;
+    session.begin({monitor});
+    batch.ready({{{0, 0, 20, 15}, annotationTestImage()}});
+    selectRect(session);
+    session.beginAnnotation(lc::annotation::AnnotationTool::Rectangle);
+    preparation.complete(QImage(10, 7, QImage::Format_RGB32));
+    app.processEvents();
+    REQUIRE(session.state() == lc::snip::SnipSessionState::Annotating);
+    REQUIRE(session.interaction() != nullptr);
+    const auto overlays = activeOverlays();
+    REQUIRE(overlays.size() == 1);
+
+    QMouseEvent press{QEvent::MouseButtonPress, QPointF{3, 4}, QPointF{3, 4},
+                      Qt::LeftButton, Qt::LeftButton, Qt::NoModifier};
+    QMouseEvent move{QEvent::MouseMove, QPointF{10, 8}, QPointF{10, 8},
+                     Qt::NoButton, Qt::LeftButton, Qt::NoModifier};
+    QMouseEvent release{QEvent::MouseButtonRelease, QPointF{10, 8}, QPointF{10, 8},
+                        Qt::LeftButton, Qt::NoButton, Qt::NoModifier};
+    QApplication::sendEvent(overlays.front(), &press);
+    QApplication::sendEvent(overlays.front(), &move);
+    QApplication::sendEvent(overlays.front(), &release);
+
+    REQUIRE(session.document()->objects().size() == 1);
+    CHECK(std::get<lc::annotation::RectangleAnnotation>(session.document()->objects().front().payload).rect ==
+          QRectF(1, 1, 7, 4));
+    auto* undo = overlays.front()->findChild<QToolButton*>("undoButton");
+    auto* redo = overlays.front()->findChild<QToolButton*>("redoButton");
+    auto* remove = overlays.front()->findChild<QToolButton*>("deleteButton");
+    REQUIRE(undo != nullptr);
+    REQUIRE(redo != nullptr);
+    REQUIRE(remove != nullptr);
+    CHECK(undo->isEnabled());
+    CHECK_FALSE(redo->isEnabled());
+    CHECK(remove->isEnabled());
+
+    QKeyEvent deleteKey{QEvent::KeyPress, Qt::Key_Delete, Qt::NoModifier};
+    QApplication::sendEvent(overlays.front(), &deleteKey);
+    CHECK(session.document()->objects().empty());
+    CHECK(undo->isEnabled());
+    CHECK_FALSE(redo->isEnabled());
+    CHECK_FALSE(remove->isEnabled());
+
+    QKeyEvent undoKey{QEvent::KeyPress, Qt::Key_Z, Qt::ControlModifier};
+    QApplication::sendEvent(overlays.front(), &undoKey);
+    REQUIRE(session.document()->objects().size() == 1);
+    CHECK(undo->isEnabled());
+    CHECK(redo->isEnabled());
+    CHECK(remove->isEnabled());
+
+    QKeyEvent redoKey{QEvent::KeyPress, Qt::Key_Y, Qt::ControlModifier};
+    QApplication::sendEvent(overlays.front(), &redoKey);
+    CHECK(session.document()->objects().empty());
+    CHECK(undo->isEnabled());
+    CHECK_FALSE(redo->isEnabled());
+    CHECK_FALSE(remove->isEnabled());
     session.cancel();
 }

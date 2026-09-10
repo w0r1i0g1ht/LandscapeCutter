@@ -5,6 +5,8 @@ add_library(landscapecutter_app_core STATIC
     annotation/AnnotationDocument.hpp
     annotation/AnnotationHistory.cpp
     annotation/AnnotationHistory.hpp
+    annotation/AnnotationInteraction.cpp
+    annotation/AnnotationInteraction.hpp
     annotation/AnnotationRenderer.cpp
     annotation/AnnotationRenderer.hpp
     annotation/AnnotationTypes.hpp

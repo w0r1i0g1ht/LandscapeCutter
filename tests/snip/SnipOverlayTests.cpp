@@ -1,8 +1,10 @@
 #include "snip/SnipOverlay.hpp"
+#include "annotation/AnnotationInteraction.hpp"
 
 #include <QApplication>
 #include <QKeyEvent>
 #include <QMouseEvent>
+#include <QPainter>
 #include <QToolButton>
 
 #include <catch2/catch_test_macros.hpp>
@@ -11,6 +13,7 @@ namespace {
 using lc::snip::FrozenMonitor;
 using lc::snip::SelectionModel;
 using lc::snip::SnipOverlay;
+using namespace lc::annotation;
 
 class ApplicationFixture {
   private:
@@ -37,6 +40,12 @@ SelectionModel selectionFor(const QRect& bounds) {
     model.move({-10, 35});
     model.release();
     return model;
+}
+
+AnnotationDocument annotationDocument(const QSize& size = {40, 30}) {
+    QImage base(size, QImage::Format_RGB32);
+    base.fill(Qt::white);
+    return AnnotationDocument(std::move(base));
 }
 
 TEST_CASE("overlay presents the frozen monitor and shared selection controls") {
@@ -161,5 +170,103 @@ TEST_CASE("closing an overlay requests cancellation") {
     overlay.close();
 
     CHECK(cancellations == 1);
+}
+
+TEST_CASE("annotation overlay routes a drag to shared interaction instead of selection") {
+    ApplicationFixture fixture;
+    SelectionModel selection;
+    selection.setBounds({0, 0, 40, 30});
+    auto document = annotationDocument();
+    AnnotationInteraction interaction(document);
+    interaction.setTool(AnnotationTool::Rectangle);
+    SnipOverlay overlay{{{0, 0, 40, 30}, annotationDocument().snapshot().base}, selection};
+    overlay.setAnnotationContext(&document, &interaction, {0, 0, 40, 30});
+
+    QMouseEvent press{QEvent::MouseButtonPress, QPointF{4, 5}, QPointF{4, 5},
+                      Qt::LeftButton, Qt::LeftButton, Qt::NoModifier};
+    QMouseEvent move{QEvent::MouseMove, QPointF{18, 16}, QPointF{18, 16},
+                     Qt::NoButton, Qt::LeftButton, Qt::NoModifier};
+    QMouseEvent release{QEvent::MouseButtonRelease, QPointF{18, 16}, QPointF{18, 16},
+                        Qt::LeftButton, Qt::NoButton, Qt::NoModifier};
+    QApplication::sendEvent(&overlay, &press);
+    QApplication::sendEvent(&overlay, &move);
+    QApplication::sendEvent(&overlay, &release);
+
+    CHECK(selection.rect().isEmpty());
+    REQUIRE(document.objects().size() == 1);
+    CHECK(std::get<RectangleAnnotation>(document.objects().front().payload).rect == QRectF(4, 5, 14, 11));
+}
+
+TEST_CASE("annotation overlay presents all Task 4 controls on the toolbar host") {
+    ApplicationFixture fixture;
+    SelectionModel selection;
+    selection.setBounds({0, 0, 40, 30});
+    auto document = annotationDocument();
+    AnnotationInteraction interaction(document);
+    SnipOverlay overlay{frozenMonitor(), selection};
+    overlay.setToolbarHost(true);
+    overlay.setAnnotationContext(&document, &interaction, {-40, 10, 40, 30});
+
+    CHECK(overlay.findChild<QToolButton*>("selectToolButton") != nullptr);
+    CHECK(overlay.findChild<QToolButton*>("rectangleToolButton") != nullptr);
+    CHECK(overlay.findChild<QToolButton*>("ellipseToolButton") != nullptr);
+    CHECK(overlay.findChild<QToolButton*>("arrowToolButton") != nullptr);
+    CHECK(overlay.findChild<QToolButton*>("brushToolButton") != nullptr);
+    CHECK(overlay.findChild<QToolButton*>("colorButton") != nullptr);
+    CHECK(overlay.findChild<QToolButton*>("undoButton") != nullptr);
+    CHECK(overlay.findChild<QToolButton*>("redoButton") != nullptr);
+    CHECK(overlay.findChild<QToolButton*>("deleteButton") != nullptr);
+}
+
+TEST_CASE("annotation overlay cancels a draft before requesting whole-session cancellation") {
+    ApplicationFixture fixture;
+    SelectionModel selection;
+    selection.setBounds({0, 0, 40, 30});
+    auto document = annotationDocument();
+    AnnotationInteraction interaction(document);
+    interaction.setTool(AnnotationTool::Arrow);
+    interaction.press({2, 2});
+    interaction.move({12, 8});
+    SnipOverlay overlay{{{0, 0, 40, 30}, annotationDocument().snapshot().base}, selection};
+    overlay.setAnnotationContext(&document, &interaction, {0, 0, 40, 30});
+    int cancellations{};
+    QObject::connect(&overlay, &SnipOverlay::cancelRequested, [&cancellations] { ++cancellations; });
+
+    QKeyEvent escape{QEvent::KeyPress, Qt::Key_Escape, Qt::NoModifier};
+    QApplication::sendEvent(&overlay, &escape);
+    CHECK_FALSE(interaction.hasDraft());
+    CHECK(cancellations == 0);
+    QApplication::sendEvent(&overlay, &escape);
+    CHECK(cancellations == 1);
+}
+
+TEST_CASE("annotation overlay clips one shared preview across monitor boundaries") {
+    ApplicationFixture fixture;
+    SelectionModel selection;
+    selection.setBounds({0, 0, 40, 20});
+    auto document = annotationDocument({40, 20});
+    REQUIRE(document.addObject(RectangleAnnotation{{5, 5, 30, 10}, {Qt::red, 3}}).has_value());
+    AnnotationInteraction interaction(document);
+    QImage image({20, 20}, QImage::Format_RGB32);
+    image.fill(Qt::white);
+    SnipOverlay left{{{0, 0, 20, 20}, image}, selection};
+    SnipOverlay right{{{20, 0, 20, 20}, image}, selection};
+    left.setToolbarHost(false);
+    right.setToolbarHost(false);
+    left.setAnnotationContext(&document, &interaction, {0, 0, 40, 20});
+    right.setAnnotationContext(&document, &interaction, {0, 0, 40, 20});
+    QImage leftPreview({20, 20}, QImage::Format_RGB32);
+    leftPreview.fill(Qt::white);
+    QImage rightPreview({20, 20}, QImage::Format_RGB32);
+    rightPreview.fill(Qt::white);
+    QPainter leftPainter(&leftPreview);
+    left.render(&leftPainter);
+    QPainter rightPainter(&rightPreview);
+    right.render(&rightPainter);
+
+    CHECK(leftPreview.pixelColor(5, 5) != QColor(Qt::white));
+    CHECK(rightPreview.pixelColor(15, 5) != QColor(Qt::white));
+    CHECK(leftPreview.pixelColor(19, 18) == QColor(Qt::white));
+    CHECK(rightPreview.pixelColor(0, 18) == QColor(Qt::white));
 }
 } // namespace

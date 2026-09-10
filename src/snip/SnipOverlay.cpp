@@ -1,6 +1,12 @@
 #include "snip/SnipOverlay.hpp"
 
+#include "annotation/AnnotationDocument.hpp"
+#include "annotation/AnnotationInteraction.hpp"
+#include "annotation/AnnotationRenderer.hpp"
+
 #include <QCloseEvent>
+#include <QColorDialog>
+#include <QDoubleSpinBox>
 #include <QGuiApplication>
 #include <QHBoxLayout>
 #include <QKeyEvent>
@@ -63,6 +69,71 @@ SnipOverlay::SnipOverlay(FrozenMonitor monitor, SelectionModel& selection, QWidg
     layout->setContentsMargins(4, 4, 4, 4);
     layout->setSpacing(4);
 
+    const auto addTool = [this, layout](const QString& objectName, const QString& text,
+                                        annotation::AnnotationTool tool) {
+        auto* button = new QToolButton(toolbar_);
+        button->setObjectName(objectName);
+        button->setText(text);
+        button->setFocusPolicy(Qt::NoFocus);
+        layout->addWidget(button);
+        connect(button, &QToolButton::clicked, this,
+                [this, tool] { emit annotationToolRequested(tool); });
+        return button;
+    };
+    selectToolButton_ =
+        addTool(QStringLiteral("selectToolButton"), tr("选择"), annotation::AnnotationTool::Select);
+    rectangleToolButton_ = addTool(QStringLiteral("rectangleToolButton"), tr("矩形"),
+                                   annotation::AnnotationTool::Rectangle);
+    ellipseToolButton_ =
+        addTool(QStringLiteral("ellipseToolButton"), tr("椭圆"), annotation::AnnotationTool::Ellipse);
+    arrowToolButton_ =
+        addTool(QStringLiteral("arrowToolButton"), tr("箭头"), annotation::AnnotationTool::Arrow);
+    brushToolButton_ = addTool(QStringLiteral("brushToolButton"), tr("画笔"),
+                               annotation::AnnotationTool::Freehand);
+    colorButton_ = new QToolButton(toolbar_);
+    colorButton_->setObjectName(QStringLiteral("colorButton"));
+    colorButton_->setText(tr("颜色"));
+    colorButton_->setFocusPolicy(Qt::NoFocus);
+    layout->addWidget(colorButton_);
+    connect(colorButton_, &QToolButton::clicked, this, [this] {
+        if (!interaction_)
+            return;
+        const auto color = QColorDialog::getColor(interaction_->style().color, this, tr("选择颜色"));
+        if (color.isValid()) {
+            auto style = interaction_->style();
+            style.color = color;
+            interaction_->setStyle(style);
+            emit annotationChanged();
+        }
+    });
+    lineWidth_ = new QDoubleSpinBox(toolbar_);
+    lineWidth_->setObjectName(QStringLiteral("lineWidthSpinBox"));
+    lineWidth_->setRange(1.0, 64.0);
+    lineWidth_->setValue(3.0);
+    lineWidth_->setFocusPolicy(Qt::NoFocus);
+    layout->addWidget(lineWidth_);
+    connect(lineWidth_, &QDoubleSpinBox::valueChanged, this, [this](double width) {
+        if (!interaction_)
+            return;
+        auto style = interaction_->style();
+        style.physicalSize = width;
+        interaction_->setStyle(style);
+        emit annotationChanged();
+    });
+    const auto addAction = [this, layout](const QString& objectName, const QString& text,
+                                          auto signal) {
+        auto* button = new QToolButton(toolbar_);
+        button->setObjectName(objectName);
+        button->setText(text);
+        button->setFocusPolicy(Qt::NoFocus);
+        layout->addWidget(button);
+        connect(button, &QToolButton::clicked, this, signal);
+        return button;
+    };
+    undoButton_ = addAction(QStringLiteral("undoButton"), tr("撤销"), &SnipOverlay::annotationUndoRequested);
+    redoButton_ = addAction(QStringLiteral("redoButton"), tr("重做"), &SnipOverlay::annotationRedoRequested);
+    deleteButton_ = addAction(QStringLiteral("deleteButton"), tr("删除"), &SnipOverlay::annotationDeleteRequested);
+
     copyButton_ = new QToolButton(toolbar_);
     copyButton_->setObjectName(QStringLiteral("copyButton"));
     copyButton_->setFocusPolicy(Qt::NoFocus);
@@ -88,15 +159,43 @@ SnipOverlay::SnipOverlay(FrozenMonitor monitor, SelectionModel& selection, QWidg
 }
 
 void SnipOverlay::refresh() {
+    const bool annotationActive = annotating();
     const bool selected = hasSelection();
     const bool selectedOnThisMonitor =
         selected && selectionInLocalCoordinates().intersects(localMonitorRect(size()));
-    copyButton_->setEnabled(selected && !busy_);
-    saveButton_->setEnabled(selected && !busy_);
+    copyButton_->setEnabled((selected || annotationActive) && !busy_);
+    saveButton_->setEnabled((selected || annotationActive) && !busy_);
     cancelButton_->setEnabled(true);
-    toolbar_->setVisible(selected && (toolbarHostAssigned_ ? toolbarHost_ : selectedOnThisMonitor));
+    const bool ownToolbar = toolbarHostAssigned_ ? toolbarHost_ : selectedOnThisMonitor;
+    toolbar_->setVisible((selected || annotationActive) && ownToolbar);
+    const bool toolPickerAvailable = selected || annotationActive;
+    selectToolButton_->setVisible(toolPickerAvailable);
+    rectangleToolButton_->setVisible(toolPickerAvailable);
+    ellipseToolButton_->setVisible(toolPickerAvailable);
+    arrowToolButton_->setVisible(toolPickerAvailable);
+    brushToolButton_->setVisible(toolPickerAvailable);
+    colorButton_->setVisible(annotationActive);
+    lineWidth_->setVisible(annotationActive);
+    undoButton_->setVisible(annotationActive);
+    redoButton_->setVisible(annotationActive);
+    deleteButton_->setVisible(annotationActive);
+    if (annotationActive) {
+        lineWidth_->setValue(interaction_->style().physicalSize);
+        undoButton_->setEnabled(document_->canUndo() && !busy_);
+        redoButton_->setEnabled(document_->canRedo() && !busy_);
+        deleteButton_->setEnabled(document_->selectedId().has_value() && !busy_);
+    }
     positionToolbar();
     update();
+}
+
+void SnipOverlay::setAnnotationContext(annotation::AnnotationDocument* document,
+                                       annotation::AnnotationInteraction* interaction,
+                                       QRect lockedSelection) {
+    document_ = document;
+    interaction_ = interaction;
+    lockedSelection_ = lockedSelection;
+    refresh();
 }
 
 void SnipOverlay::setBusy(bool busy) {
@@ -119,6 +218,15 @@ void SnipOverlay::paintEvent(QPaintEvent* event) {
     Q_UNUSED(event);
     QPainter painter(this);
     painter.drawImage(rect(), monitor_.image);
+
+    if (annotating()) {
+        auto snapshot = document_->snapshot();
+        if (const auto currentDraft = interaction_->draft(); currentDraft.has_value())
+            snapshot.objects.push_back(*currentDraft);
+        annotation::drawAnnotations(painter, snapshot, documentToLocalTransform(),
+                                    localMonitorRect(size()));
+        return;
+    }
 
     const auto selected = selectionInLocalCoordinates();
     if (selected.isEmpty() || !selected.intersects(localMonitorRect(size()))) {
@@ -200,7 +308,32 @@ void SnipOverlay::resizeEvent(QResizeEvent* event) {
 
 void SnipOverlay::keyPressEvent(QKeyEvent* event) {
     if (event->key() == Qt::Key_Escape) {
+        if (annotating() && interaction_->hasDraft()) {
+            interaction_->cancelDraft();
+            emit annotationChanged();
+            refresh();
+            event->accept();
+            return;
+        }
         emit cancelRequested();
+        event->accept();
+        return;
+    }
+    if (annotating() && event->key() == Qt::Key_Z && event->modifiers().testFlag(Qt::ControlModifier)) {
+        if (event->modifiers().testFlag(Qt::ShiftModifier))
+            emit annotationRedoRequested();
+        else
+            emit annotationUndoRequested();
+        event->accept();
+        return;
+    }
+    if (annotating() && event->key() == Qt::Key_Y && event->modifiers().testFlag(Qt::ControlModifier)) {
+        emit annotationRedoRequested();
+        event->accept();
+        return;
+    }
+    if (annotating() && event->key() == Qt::Key_Delete) {
+        emit annotationDeleteRequested();
         event->accept();
         return;
     }
@@ -228,6 +361,16 @@ void SnipOverlay::mousePressEvent(QMouseEvent* event) {
         return;
     }
 
+    if (annotating()) {
+        interaction_->press(annotationPoint(event));
+        dragging_ = true;
+        grabMouse();
+        emit annotationChanged();
+        refresh();
+        event->accept();
+        return;
+    }
+
     selection_.press(physicalCursor(event), kHandleRadius);
     dragging_ = true;
     grabMouse();
@@ -243,6 +386,14 @@ void SnipOverlay::mouseMoveEvent(QMouseEvent* event) {
     }
     if (!dragging_) {
         QWidget::mouseMoveEvent(event);
+        return;
+    }
+
+    if (annotating()) {
+        interaction_->move(annotationPoint(event));
+        emit annotationChanged();
+        refresh();
+        event->accept();
         return;
     }
 
@@ -262,6 +413,16 @@ void SnipOverlay::mouseReleaseEvent(QMouseEvent* event) {
         return;
     }
 
+    if (annotating()) {
+        interaction_->release(annotationPoint(event));
+        dragging_ = false;
+        releaseMouse();
+        emit annotationChanged();
+        refresh();
+        event->accept();
+        return;
+    }
+
     selection_.move(physicalCursor(event));
     selection_.release();
     dragging_ = false;
@@ -272,7 +433,7 @@ void SnipOverlay::mouseReleaseEvent(QMouseEvent* event) {
 }
 
 void SnipOverlay::mouseDoubleClickEvent(QMouseEvent* event) {
-    if (!busy_ && event->button() == Qt::LeftButton && hasSelection()) {
+    if (!annotating() && !busy_ && event->button() == Qt::LeftButton && hasSelection()) {
         const auto point = physicalCursor(event);
         const auto rectangle = selection_.rect();
         if (point.x() >= rectangle.x() && point.x() < rectangle.x() + rectangle.width() &&
@@ -287,9 +448,11 @@ void SnipOverlay::mouseDoubleClickEvent(QMouseEvent* event) {
 
 QPoint SnipOverlay::physicalCursor(const QMouseEvent* event) const {
 #ifdef Q_OS_WIN
-    POINT cursor{};
-    if (GetCursorPos(&cursor) != FALSE) {
-        return {cursor.x, cursor.y};
+    if (QGuiApplication::platformName() == QStringLiteral("windows")) {
+        POINT cursor{};
+        if (GetCursorPos(&cursor) != FALSE) {
+            return {cursor.x, cursor.y};
+        }
     }
 #endif
     const qreal horizontalScale = monitor_.geometry.width() > 0
@@ -315,8 +478,28 @@ QRectF SnipOverlay::selectionInLocalCoordinates() const {
             selection.width() * horizontalScale, selection.height() * verticalScale};
 }
 
+QPointF SnipOverlay::annotationPoint(const QMouseEvent* event) const {
+    return QPointF(physicalCursor(event) - lockedSelection_.topLeft());
+}
+
+QTransform SnipOverlay::documentToLocalTransform() const {
+    const qreal horizontalScale = monitor_.geometry.width() > 0
+                                      ? static_cast<qreal>(width()) / monitor_.geometry.width()
+                                      : 1.0;
+    const qreal verticalScale = monitor_.geometry.height() > 0
+                                    ? static_cast<qreal>(height()) / monitor_.geometry.height()
+                                    : 1.0;
+    return {horizontalScale, 0.0, 0.0, verticalScale,
+            (lockedSelection_.x() - monitor_.geometry.x()) * horizontalScale,
+            (lockedSelection_.y() - monitor_.geometry.y()) * verticalScale};
+}
+
 bool SnipOverlay::hasSelection() const noexcept {
     return selection_.rect().isValid();
+}
+
+bool SnipOverlay::annotating() const noexcept {
+    return document_ != nullptr && interaction_ != nullptr && !lockedSelection_.isEmpty();
 }
 
 void SnipOverlay::positionToolbar() {
@@ -336,13 +519,13 @@ void SnipOverlay::positionToolbar() {
 }
 
 void SnipOverlay::requestCopyIfSelected() {
-    if (hasSelection() && !busy_) {
+    if ((hasSelection() || annotating()) && !busy_) {
         emit copyRequested();
     }
 }
 
 void SnipOverlay::requestSaveIfSelected() {
-    if (hasSelection() && !busy_) {
+    if ((hasSelection() || annotating()) && !busy_) {
         emit saveRequested();
     }
 }

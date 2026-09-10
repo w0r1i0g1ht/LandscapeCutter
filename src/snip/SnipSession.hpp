@@ -1,5 +1,6 @@
 #pragma once
 #include "annotation/AnnotationDocument.hpp"
+#include "annotation/AnnotationInteraction.hpp"
 #include "annotation/AnnotationPreparation.hpp"
 #include "annotation/AnnotationTypes.hpp"
 #include "snip/SelectionModel.hpp"
@@ -45,6 +46,9 @@ class SnipSession final : public QObject {
     [[nodiscard]] annotation::AnnotationDocument* document() const noexcept {
         return document_.get();
     }
+    [[nodiscard]] annotation::AnnotationInteraction* interaction() const noexcept {
+        return interaction_.get();
+    }
     [[nodiscard]] QRect lockedSelection() const noexcept {
         return lockedSelection_;
     }
@@ -77,6 +81,7 @@ class SnipSession final : public QObject {
     ChooseSavePath savePathChooser_;
     std::shared_ptr<std::atomic_bool> cancellation_;
     std::unique_ptr<annotation::AnnotationDocument> document_;
+    std::unique_ptr<annotation::AnnotationInteraction> interaction_;
     annotation::AnnotationTool tool_{annotation::AnnotationTool::Select};
     std::uint64_t id_ = 0;
     std::uint64_t annotationPreparationId_ = 0;
