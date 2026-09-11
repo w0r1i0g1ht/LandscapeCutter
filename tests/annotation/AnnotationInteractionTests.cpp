@@ -1,5 +1,7 @@
 #include "annotation/AnnotationDocument.hpp"
 #include "annotation/AnnotationInteraction.hpp"
+#include "annotation/AnnotationRenderer.hpp"
+#include "AnnotationTestApplication.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -227,5 +229,21 @@ TEST_CASE("annotation interaction isolates full-box hits and exact line toleranc
     CHECK(interaction.hitTest({28, 11}) == ellipse);
     CHECK(interaction.hitTest({20, 28}) == arrow);
     CHECK_FALSE(interaction.hitTest({20, 28.01}).has_value());
+}
+
+TEST_CASE("annotation interaction gives text a three-pixel hit target margin") {
+    static_cast<void>(annotationTestApplication());
+    auto value = document();
+    const TextAnnotation text{{10, 5}, QStringLiteral("Text"), {Qt::red, 12}};
+    const auto id = value.addObject(text);
+    REQUIRE(id.has_value());
+    AnnotationInteraction interaction(value);
+    const QRectF bounds = textLogicalRect(text);
+
+    CHECK(interaction.hitTest({bounds.left() - 3.0, bounds.center().y()}) == id);
+    CHECK(interaction.hitTest({bounds.right() + 3.0, bounds.center().y()}) == id);
+    CHECK(interaction.hitTest({bounds.center().x(), bounds.top() - 3.0}) == id);
+    CHECK(interaction.hitTest({bounds.center().x(), bounds.bottom() + 3.0}) == id);
+    CHECK_FALSE(interaction.hitTest({bounds.left() - 3.01, bounds.center().y()}).has_value());
 }
 } // namespace

@@ -1,9 +1,9 @@
 #include "annotation/AnnotationDocument.hpp"
 #include "annotation/AnnotationRenderer.hpp"
+#include "AnnotationTestApplication.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 
-#include <QApplication>
 #include <QFontDatabase>
 #include <QFontMetricsF>
 #include <QPainter>
@@ -13,14 +13,6 @@
 
 namespace {
 using namespace lc::annotation;
-
-QApplication& textApplication() {
-    static int argc{1};
-    static char applicationName[] = "annotation-text-test";
-    static char* argv[]{applicationName, nullptr};
-    static QApplication application(argc, argv);
-    return application;
-}
 
 AnnotationSnapshot textSnapshot(const TextAnnotation& text) {
     QImage base(160, 100, QImage::Format_RGB32);
@@ -46,8 +38,30 @@ QRect nonWhiteBounds(const QImage& image) {
     return right < left ? QRect{} : QRect(left, top, right - left + 1, bottom - top + 1);
 }
 
+bool textPixelsWithinTolerance(const QImage& actual, const QImage& expected,
+                               const QRectF& logicalBounds) {
+    const QRect sampled = logicalBounds.toAlignedRect().intersected(actual.rect()).intersected(expected.rect());
+    int channels{};
+    int withinTolerance{};
+    for (int y = sampled.top(); y <= sampled.bottom(); ++y) {
+        for (int x = sampled.left(); x <= sampled.right(); ++x) {
+            const QColor rendered = actual.pixelColor(x, y);
+            const QColor reference = expected.pixelColor(x, y);
+            if (rendered == QColor(Qt::white) && reference == QColor(Qt::white))
+                continue;
+            for (const int difference : {std::abs(rendered.red() - reference.red()),
+                                         std::abs(rendered.green() - reference.green()),
+                                         std::abs(rendered.blue() - reference.blue())}) {
+                ++channels;
+                withinTolerance += difference <= 16 ? 1 : 0;
+            }
+        }
+    }
+    return channels > 0 && withinTolerance * 100 >= channels * 95;
+}
+
 TEST_CASE("annotation text normalization expands tabs and rejects whitespace-only payloads") {
-    static_cast<void>(textApplication());
+    static_cast<void>(annotationTestApplication());
     QImage base(80, 60, QImage::Format_RGB32);
     AnnotationDocument document(base);
 
@@ -59,7 +73,7 @@ TEST_CASE("annotation text normalization expands tabs and rejects whitespace-onl
 }
 
 TEST_CASE("annotation text logical bounds use physical font metrics and line spacing") {
-    static_cast<void>(textApplication());
+    static_cast<void>(annotationTestApplication());
     const TextAnnotation text{{12, 18}, QStringLiteral("Wide\nI"), {Qt::blue, 24}};
     const QFont font = resolvedAnnotationFont(24);
     const QFontMetricsF metrics(font);
@@ -74,7 +88,7 @@ TEST_CASE("annotation text logical bounds use physical font metrics and line spa
 }
 
 TEST_CASE("annotation text font resolves through the required fallback chain") {
-    static_cast<void>(textApplication());
+    static_cast<void>(annotationTestApplication());
     const QFont font = resolvedAnnotationFont(19);
     const QStringList candidates{QStringLiteral("Segoe UI"), QStringLiteral("Microsoft YaHei UI"),
                                  QStringLiteral("Arial"), QFontDatabase::systemFont(QFontDatabase::GeneralFont).family()};
@@ -86,7 +100,7 @@ TEST_CASE("annotation text font resolves through the required fallback chain") {
 }
 
 TEST_CASE("annotation text output starts at its baseline and matches fixed physical pixels") {
-    static_cast<void>(textApplication());
+    static_cast<void>(annotationTestApplication());
     const TextAnnotation text{{16, 18}, QStringLiteral("Hi\nQt"), {Qt::red, 24}};
     const auto snapshot = textSnapshot(text);
     const QImage actual = composeAnnotations(snapshot);
@@ -107,20 +121,9 @@ TEST_CASE("annotation text output starts at its baseline and matches fixed physi
     CHECK(std::abs(actualBounds.right() - expectedBounds.right()) <= 1);
     CHECK(std::abs(actualBounds.bottom() - expectedBounds.bottom()) <= 1);
 
-    int channels{};
-    int withinTolerance{};
-    for (int y = 0; y < actual.height(); ++y) {
-        for (int x = 0; x < actual.width(); ++x) {
-            const QColor rendered = actual.pixelColor(x, y);
-            const QColor reference = expected.pixelColor(x, y);
-            for (const int difference : {std::abs(rendered.red() - reference.red()),
-                                         std::abs(rendered.green() - reference.green()),
-                                         std::abs(rendered.blue() - reference.blue())}) {
-                ++channels;
-                withinTolerance += difference <= 16 ? 1 : 0;
-            }
-        }
-    }
-    CHECK(withinTolerance * 100 >= channels * 95);
+    CHECK(textPixelsWithinTolerance(actual, expected, textLogicalRect(text)));
+    const TextAnnotation missing{text.anchor, QString{}, text.style};
+    CHECK_FALSE(textPixelsWithinTolerance(composeAnnotations(textSnapshot(missing)), expected,
+                                          textLogicalRect(text)));
 }
 } // namespace

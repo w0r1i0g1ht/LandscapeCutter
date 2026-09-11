@@ -11,6 +11,7 @@
 #include <QToolButton>
 #include <algorithm>
 #include <catch2/catch_test_macros.hpp>
+#include <functional>
 namespace {
 struct SessionService : lc::capture::IMonitorCaptureService {
     void captureOnce(lc::capture::MonitorCaptureRequest, lc::capture::CaptureCompletion) override {}
@@ -85,6 +86,18 @@ int visibleToolbarCount(const std::vector<lc::snip::SnipOverlay*>& overlays) {
             const auto* toolbar = overlay->findChild<QWidget*>("snipToolbar");
             return toolbar != nullptr && !toolbar->isHidden();
         }));
+}
+
+void sendDoubleClickSequence(QWidget& widget, QPointF point) {
+    const auto send = [&widget, point](QEvent::Type type) {
+        QMouseEvent event{type, point, point, Qt::LeftButton, Qt::LeftButton, Qt::NoModifier};
+        QApplication::sendEvent(&widget, &event);
+    };
+    send(QEvent::MouseButtonPress);
+    send(QEvent::MouseButtonRelease);
+    send(QEvent::MouseButtonPress);
+    send(QEvent::MouseButtonDblClick);
+    send(QEvent::MouseButtonRelease);
 }
 } // namespace
 TEST_CASE("snip session opens frozen overlays together and cancellation closes them") {
@@ -703,5 +716,62 @@ TEST_CASE("a text click on a non-host overlay creates the editor on the toolbar 
 
     CHECK((*passive)->findChild<QPlainTextEdit*>("annotationTextEditor") == nullptr);
     CHECK((*host)->findChild<QPlainTextEdit*>("annotationTextEditor") != nullptr);
+    session.cancel();
+}
+
+TEST_CASE("a non-host text double-click replaces an empty host draft with the hit object") {
+    int argc = 1;
+    char name[] = "annotation-text-host-double-click-test";
+    char* argv[] = {name, nullptr};
+    QApplication app(argc, argv);
+    SessionService service;
+    SessionRecovery recovery;
+    lc::snip::SnapshotBatch batch(service, recovery, {});
+    ControlledPreparation preparation;
+    lc::snip::SnipSession session(batch, preparation.function());
+    lc::platform::windows::MonitorDescriptor left{}, right{};
+    left.desktopRect = {0, 0, 20, 20};
+    left.catalogGeneration = 1;
+    right.desktopRect = {20, 0, 40, 20};
+    right.catalogGeneration = 1;
+    session.begin({left, right});
+    QImage image(20, 20, QImage::Format_RGB32);
+    image.fill(Qt::white);
+    batch.ready({{{0, 0, 20, 20}, image}, {{20, 0, 20, 20}, image}});
+    session.selection().press({5, 5}, 0);
+    session.selection().move({35, 15});
+    session.selection().release();
+    session.beginAnnotation(lc::annotation::AnnotationTool::Text);
+    preparation.complete(QImage(30, 10, QImage::Format_RGB32));
+    app.processEvents();
+    const auto overlays = activeOverlays();
+    REQUIRE(overlays.size() == 2);
+    const auto host = std::find_if(overlays.begin(), overlays.end(),
+                                   [](const auto* overlay) { return overlay->isToolbarHost(); });
+    REQUIRE(host != overlays.end());
+    const auto passive = std::find_if(overlays.begin(), overlays.end(),
+                                      [host](const auto* overlay) { return overlay != *host; });
+    REQUIRE(passive != overlays.end());
+    REQUIRE(session.document() != nullptr);
+    REQUIRE(session.document()
+                ->addObject(lc::annotation::TextAnnotation{{18, 3}, QStringLiteral("old"), {Qt::red, 12}})
+                .has_value());
+
+    QMouseEvent initialPress{QEvent::MouseButtonPress, QPointF{1, 1}, QPointF{1, 1},
+                             Qt::LeftButton, Qt::LeftButton, Qt::NoModifier};
+    QApplication::sendEvent(*passive, &initialPress);
+    auto* editor = (*host)->findChild<QPlainTextEdit*>("annotationTextEditor");
+    REQUIRE(editor != nullptr);
+    CHECK(editor->toPlainText().isEmpty());
+
+    sendDoubleClickSequence(**passive, {3, 8});
+
+    editor = (*host)->findChild<QPlainTextEdit*>("annotationTextEditor");
+    REQUIRE(editor != nullptr);
+    CHECK(editor->toPlainText() == QStringLiteral("old"));
+    const auto editorCount = std::count_if(overlays.begin(), overlays.end(), [](const auto* overlay) {
+        return overlay->template findChild<QPlainTextEdit*>("annotationTextEditor") != nullptr;
+    });
+    CHECK(editorCount == 1);
     session.cancel();
 }

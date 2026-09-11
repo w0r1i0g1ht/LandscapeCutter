@@ -82,6 +82,7 @@ class SnipOverlay final : public QWidget {
     [[nodiscard]] bool hasSelection() const noexcept;
     [[nodiscard]] bool annotating() const noexcept;
     [[nodiscard]] bool ownsToolbar() const;
+    void cancelAnnotationGesture();
     void beginTextEditor(QPointF anchor, std::optional<annotation::AnnotationObject> original = std::nullopt);
     void commitTextEditor();
     void cancelTextEditor();

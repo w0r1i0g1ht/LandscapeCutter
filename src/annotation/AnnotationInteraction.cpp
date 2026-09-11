@@ -12,6 +12,7 @@ namespace lc::annotation {
 namespace {
 constexpr qreal kHandleTolerance = 6.0;
 constexpr qreal kFreehandMergeDistance = 1.5;
+constexpr qreal kTextHitTolerance = 3.0;
 
 qreal lineTolerance(const AnnotationStyle& style) {
     return std::max<qreal>(6.0, style.physicalSize / 2.0 + 3.0);
@@ -209,7 +210,10 @@ std::optional<AnnotationId> AnnotationInteraction::hitTest(QPointF point) const 
                     }
                     return false;
                 } else if constexpr (std::is_same_v<Value, TextAnnotation>) {
-                    return textLogicalRect(value).contains(point);
+                    return textLogicalRect(value)
+                        .adjusted(-kTextHitTolerance, -kTextHitTolerance, kTextHitTolerance,
+                                  kTextHitTolerance)
+                        .contains(point);
                 }
                 return false;
             },

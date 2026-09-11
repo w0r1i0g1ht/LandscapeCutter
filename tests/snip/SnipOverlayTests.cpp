@@ -12,6 +12,8 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <functional>
+
 namespace {
 using lc::snip::FrozenMonitor;
 using lc::snip::SelectionModel;
@@ -49,6 +51,21 @@ AnnotationDocument annotationDocument(const QSize& size = {40, 30}) {
     QImage base(size, QImage::Format_RGB32);
     base.fill(Qt::white);
     return AnnotationDocument(std::move(base));
+}
+
+void sendDoubleClickSequence(QWidget& widget, QPointF point,
+                             std::function<void()> betweenDoubleClickAndRelease = {}) {
+    const auto send = [&widget, point](QEvent::Type type) {
+        QMouseEvent event{type, point, point, Qt::LeftButton, Qt::LeftButton, Qt::NoModifier};
+        QApplication::sendEvent(&widget, &event);
+    };
+    send(QEvent::MouseButtonPress);
+    send(QEvent::MouseButtonRelease);
+    send(QEvent::MouseButtonPress);
+    send(QEvent::MouseButtonDblClick);
+    if (betweenDoubleClickAndRelease)
+        betweenDoubleClickAndRelease();
+    send(QEvent::MouseButtonRelease);
 }
 
 TEST_CASE("overlay presents the frozen monitor and shared selection controls") {
@@ -455,5 +472,63 @@ TEST_CASE("double-clicking text reopens one editor without requesting screenshot
     CHECK(std::get<TextAnnotation>(document.objects().front().payload).text == QStringLiteral("new"));
     REQUIRE(document.undo());
     CHECK(std::get<TextAnnotation>(document.objects().front().payload).text == QStringLiteral("old"));
+}
+
+TEST_CASE("a real double-click edits text without retaining a creation or selection draft") {
+    const auto verify = [](AnnotationTool tool) {
+        SelectionModel selection;
+        selection.setBounds({0, 0, 40, 30});
+        auto document = annotationDocument();
+        const auto id = document.addObject(TextAnnotation{{6, 5}, QStringLiteral("old"), {Qt::red, 12}});
+        REQUIRE(id.has_value());
+        AnnotationInteraction interaction(document);
+        interaction.setTool(tool);
+        SnipOverlay overlay{{{0, 0, 40, 30}, annotationDocument().snapshot().base}, selection};
+        overlay.setToolbarHost(true);
+        overlay.setAnnotationContext(&document, &interaction, {0, 0, 40, 30});
+
+        sendDoubleClickSequence(overlay, {7, 6}, [&interaction] {
+            CHECK_FALSE(interaction.hasDraft());
+        });
+
+        auto* editor = overlay.findChild<QPlainTextEdit*>("annotationTextEditor");
+        REQUIRE(editor != nullptr);
+        CHECK(editor->toPlainText() == QStringLiteral("old"));
+        editor->setPlainText(QStringLiteral("new"));
+        QKeyEvent commit{QEvent::KeyPress, Qt::Key_Return, Qt::ControlModifier};
+        QApplication::sendEvent(editor, &commit);
+        CHECK_FALSE(interaction.hasDraft());
+        REQUIRE(document.objects().size() == 1);
+        CHECK(std::get<TextAnnotation>(document.objects().front().payload).text == QStringLiteral("new"));
+    };
+
+    ApplicationFixture fixture;
+    verify(AnnotationTool::Text);
+    verify(AnnotationTool::Select);
+}
+
+TEST_CASE("a real select double-click clears its draft before opening text editing") {
+    ApplicationFixture fixture;
+    SelectionModel selection;
+    selection.setBounds({0, 0, 40, 30});
+    auto document = annotationDocument();
+    REQUIRE(document.addObject(TextAnnotation{{6, 5}, QStringLiteral("old"), {Qt::red, 12}}).has_value());
+    AnnotationInteraction interaction(document);
+    interaction.setTool(AnnotationTool::Select);
+    SnipOverlay overlay{{{0, 0, 40, 30}, annotationDocument().snapshot().base}, selection};
+    overlay.setToolbarHost(true);
+    overlay.setAnnotationContext(&document, &interaction, {0, 0, 40, 30});
+
+    sendDoubleClickSequence(overlay, {7, 6}, [&interaction] {
+        CHECK_FALSE(interaction.hasDraft());
+    });
+
+    auto* editor = overlay.findChild<QPlainTextEdit*>("annotationTextEditor");
+    REQUIRE(editor != nullptr);
+    editor->setPlainText(QStringLiteral("new"));
+    QKeyEvent commit{QEvent::KeyPress, Qt::Key_Return, Qt::ControlModifier};
+    QApplication::sendEvent(editor, &commit);
+    CHECK_FALSE(interaction.hasDraft());
+    CHECK(std::get<TextAnnotation>(document.objects().front().payload).text == QStringLiteral("new"));
 }
 } // namespace

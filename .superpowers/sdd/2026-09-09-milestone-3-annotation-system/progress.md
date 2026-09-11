@@ -96,6 +96,8 @@ Preflight result: no unresolved contradictions between tasks, the plan's global 
 - GREEN: focused text/editor/session routing 7/7; full annotation 33 cases/4212 assertions; full app-controller 40 cases/197 assertions in the fresh MSVC Debug Ninja build.
 - Process audit: only protected baseline PIDs `14104`, `20732`, `24440`, and `27444` remained.
 - Report: `.superpowers/sdd/2026-09-09-milestone-3-annotation-system/task-5-report.md`.
+- Review fix round 1: text hit testing now expands the logical bounds by 3 physical pixels; logical-bound pixel comparison proves a missing-text image fails; true Text/Select and non-host double-click sequences clear drafts/grabs and replace an empty host editor.
+- Review GREEN: focused 5/5; full annotation 34 cases/4219 assertions; full app-controller 43 cases/226 assertions; only protected baseline PIDs remained.
 - Status: complete
 
 ## Task 3: Snip Session Annotation State and Cancellable Base Preparation

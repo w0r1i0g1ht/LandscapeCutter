@@ -32,3 +32,26 @@ The resumed focused run initially exposed fixture errors: strings used literal \
 ## Scope note
 
 The task brief listed overlay files but omitted the session owner. SnipSession.cpp and SnipSessionTests.cpp were added only to route a click or re-edit request from a non-host overlay to the actual toolbar host. Without that owner-level wiring, the cross-monitor single-editor requirement could not be met.
+
+## Review fix round 1
+
+### RED
+
+- The new three-pixel text hit-target test failed all four left, right, top, and bottom boundary checks because hit testing used only the logical text rectangle.
+- The real Qt double-click sequence (press, release, press, double-click, release) opened an empty editor in Text mode and committed a second text object. The same sequence from a non-host overlay retained the host's empty draft instead of the hit object.
+- The rendering comparison now samples only non-white pixels inside the logical text rectangle. A deliberately missing-text image fails that same comparison, proving that an all-white output cannot be hidden by the surrounding base image.
+
+### Changes
+
+- Expanded TextAnnotation hit testing by three physical pixels on every side.
+- Moved text-object detection ahead of Text-tool creation. Re-editing replaces only an empty creation editor; an editor for committed non-empty text stays active.
+- Cleared the shared interaction draft and released the overlay drag/mouse grab before opening any text editor, including the non-host routing path.
+- Added true Qt event-order coverage for Text and Select double-clicks and for a non-host double-click that replaces an existing empty host draft while retaining exactly one host editor.
+- Centralized annotation test QApplication ownership in AnnotationTestApplication.hpp. This avoids a second static QApplication blocking the full randomized test executable.
+
+### GREEN validation
+
+- ctest focused review set: 5/5 passed.
+- landscapecutter_annotation_tests.exe: 4,219 assertions in 34 test cases passed.
+- landscapecutter_app_controller_tests.exe: 226 assertions in 43 test cases passed.
+- No residual test process remained beyond the protected baseline PIDs 14104, 20732, 24440, and 27444.

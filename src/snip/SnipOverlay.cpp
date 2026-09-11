@@ -221,12 +221,18 @@ void SnipOverlay::createTextEditor(QPointF anchor) {
 }
 
 void SnipOverlay::editTextEditor(const annotation::AnnotationId id) {
-    if (!annotating() || !ownsToolbar() || textEditor_)
+    if (!annotating() || !ownsToolbar())
         return;
     const auto found = std::find_if(document_->objects().begin(), document_->objects().end(),
                                     [id](const auto& object) { return object.id == id; });
     if (found != document_->objects().end() &&
         std::holds_alternative<annotation::TextAnnotation>(found->payload)) {
+        if (textEditor_) {
+            if (textEditBefore_.has_value() || !textEditor_->toPlainText().trimmed().isEmpty())
+                return;
+            cancelTextEditor();
+        }
+        cancelAnnotationGesture();
         beginTextEditor(std::get<annotation::TextAnnotation>(found->payload).anchor, *found);
     }
 }
@@ -404,16 +410,30 @@ void SnipOverlay::mousePressEvent(QMouseEvent* event) {
         return;
     }
 
-    if (annotating() && textEditor_) {
+    if (annotating() && interaction_->tool() == annotation::AnnotationTool::Text) {
+        const auto hit = interaction_->hitTest(annotationPoint(event));
+        const auto found = hit.has_value()
+                               ? std::find_if(document_->objects().begin(), document_->objects().end(),
+                                              [hit](const auto& object) { return object.id == *hit; })
+                               : document_->objects().end();
+        if (found != document_->objects().end() &&
+            std::holds_alternative<annotation::TextAnnotation>(found->payload)) {
+            cancelAnnotationGesture();
+            if (ownsToolbar())
+                editTextEditor(*hit);
+            else
+                emit annotationTextEditRequested(*hit);
+        } else if (!textEditor_) {
+            if (ownsToolbar())
+                createTextEditor(annotationPoint(event));
+            else
+                emit annotationTextCreateRequested(annotationPoint(event));
+        }
         event->accept();
         return;
     }
 
-    if (annotating() && interaction_->tool() == annotation::AnnotationTool::Text) {
-        if (ownsToolbar())
-            createTextEditor(annotationPoint(event));
-        else
-            emit annotationTextCreateRequested(annotationPoint(event));
+    if (annotating() && textEditor_) {
         event->accept();
         return;
     }
@@ -490,25 +510,27 @@ void SnipOverlay::mouseReleaseEvent(QMouseEvent* event) {
 }
 
 void SnipOverlay::mouseDoubleClickEvent(QMouseEvent* event) {
-    if (annotating() && !busy_ && event->button() == Qt::LeftButton && ownsToolbar() && !textEditor_) {
+    if (annotating() && !busy_ && event->button() == Qt::LeftButton && ownsToolbar()) {
         const auto hit = interaction_->hitTest(annotationPoint(event));
         if (hit.has_value()) {
             const auto found = std::find_if(document_->objects().begin(), document_->objects().end(),
                                             [hit](const auto& object) { return object.id == *hit; });
             if (found != document_->objects().end() &&
                 std::holds_alternative<annotation::TextAnnotation>(found->payload)) {
+                cancelAnnotationGesture();
                 editTextEditor(*hit);
                 event->accept();
                 return;
             }
         }
-    } else if (annotating() && !busy_ && event->button() == Qt::LeftButton && !textEditor_) {
+    } else if (annotating() && !busy_ && event->button() == Qt::LeftButton) {
         const auto hit = interaction_->hitTest(annotationPoint(event));
         if (hit.has_value()) {
             const auto found = std::find_if(document_->objects().begin(), document_->objects().end(),
                                             [hit](const auto& object) { return object.id == *hit; });
             if (found != document_->objects().end() &&
                 std::holds_alternative<annotation::TextAnnotation>(found->payload)) {
+                cancelAnnotationGesture();
                 emit annotationTextEditRequested(*hit);
                 event->accept();
                 return;
@@ -588,6 +610,15 @@ bool SnipOverlay::ownsToolbar() const {
     return toolbarHostAssigned_
                ? toolbarHost_
                : (hasSelection() && selectionInLocalCoordinates().intersects(localMonitorRect(size())));
+}
+
+void SnipOverlay::cancelAnnotationGesture() {
+    if (interaction_)
+        interaction_->cancelDraft();
+    if (dragging_) {
+        dragging_ = false;
+        releaseMouse();
+    }
 }
 
 void SnipOverlay::beginTextEditor(QPointF anchor,
