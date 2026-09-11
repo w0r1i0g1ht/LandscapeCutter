@@ -99,6 +99,10 @@ Preflight result: no unresolved contradictions between tasks, the plan's global 
 - Review fix round 1: text hit testing now expands the logical bounds by 3 physical pixels; logical-bound pixel comparison proves a missing-text image fails; true Text/Select and non-host double-click sequences clear drafts/grabs and replace an empty host editor.
 - Review GREEN: focused 5/5; full annotation 34 cases/4219 assertions; full app-controller 43 cases/226 assertions; only protected baseline PIDs remained.
 - Status: complete
+- Review round 1: three Important findings required the specified 3px text hit margin, a non-diluted logical-bound pixel tolerance, and real Qt double-click sequence handling.
+- Fix commit: `1171129 fix: address text annotation review findings`.
+- Re-review round 1: all three findings addressed; no new Critical/Important breakage.
+- Task 5: complete (commits `eb56db8..1171129`, review clean)
 
 ## Task 3: Snip Session Annotation State and Cancellable Base Preparation
 
