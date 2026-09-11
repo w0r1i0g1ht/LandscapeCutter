@@ -212,6 +212,25 @@ void SnipOverlay::clearAnnotationContext() {
     refresh();
 }
 
+bool SnipOverlay::isToolbarHost() const noexcept {
+    return toolbarHostAssigned_ && toolbarHost_;
+}
+
+void SnipOverlay::createTextEditor(QPointF anchor) {
+    beginTextEditor(anchor);
+}
+
+void SnipOverlay::editTextEditor(const annotation::AnnotationId id) {
+    if (!annotating() || !ownsToolbar() || textEditor_)
+        return;
+    const auto found = std::find_if(document_->objects().begin(), document_->objects().end(),
+                                    [id](const auto& object) { return object.id == id; });
+    if (found != document_->objects().end() &&
+        std::holds_alternative<annotation::TextAnnotation>(found->payload)) {
+        beginTextEditor(std::get<annotation::TextAnnotation>(found->payload).anchor, *found);
+    }
+}
+
 void SnipOverlay::setBusy(bool busy) {
     busy_ = busy;
     if (busy_ && dragging_) {
@@ -392,7 +411,9 @@ void SnipOverlay::mousePressEvent(QMouseEvent* event) {
 
     if (annotating() && interaction_->tool() == annotation::AnnotationTool::Text) {
         if (ownsToolbar())
-            beginTextEditor(annotationPoint(event));
+            createTextEditor(annotationPoint(event));
+        else
+            emit annotationTextCreateRequested(annotationPoint(event));
         event->accept();
         return;
     }
@@ -476,8 +497,19 @@ void SnipOverlay::mouseDoubleClickEvent(QMouseEvent* event) {
                                             [hit](const auto& object) { return object.id == *hit; });
             if (found != document_->objects().end() &&
                 std::holds_alternative<annotation::TextAnnotation>(found->payload)) {
-                const auto& text = std::get<annotation::TextAnnotation>(found->payload);
-                beginTextEditor(text.anchor, *found);
+                editTextEditor(*hit);
+                event->accept();
+                return;
+            }
+        }
+    } else if (annotating() && !busy_ && event->button() == Qt::LeftButton && !textEditor_) {
+        const auto hit = interaction_->hitTest(annotationPoint(event));
+        if (hit.has_value()) {
+            const auto found = std::find_if(document_->objects().begin(), document_->objects().end(),
+                                            [hit](const auto& object) { return object.id == *hit; });
+            if (found != document_->objects().end() &&
+                std::holds_alternative<annotation::TextAnnotation>(found->payload)) {
+                emit annotationTextEditRequested(*hit);
                 event->accept();
                 return;
             }

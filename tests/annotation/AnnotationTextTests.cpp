@@ -51,16 +51,16 @@ TEST_CASE("annotation text normalization expands tabs and rejects whitespace-onl
     QImage base(80, 60, QImage::Format_RGB32);
     AnnotationDocument document(base);
 
-    const auto id = document.addObject(TextAnnotation{{4, 5}, QStringLiteral("A\\tB"), {Qt::red, 24}});
+    const auto id = document.addObject(TextAnnotation{{4, 5}, QStringLiteral("A\tB"), {Qt::red, 24}});
     REQUIRE(id.has_value());
     CHECK(std::get<TextAnnotation>(document.objects().front().payload).text == QStringLiteral("A    B"));
-    CHECK_FALSE(document.addObject(TextAnnotation{{4, 5}, QStringLiteral(" \\t\\n "), {Qt::red, 24}})
+    CHECK_FALSE(document.addObject(TextAnnotation{{4, 5}, QStringLiteral(" \t\n "), {Qt::red, 24}})
                     .has_value());
 }
 
 TEST_CASE("annotation text logical bounds use physical font metrics and line spacing") {
     static_cast<void>(textApplication());
-    const TextAnnotation text{{12, 18}, QStringLiteral("Wide\\nI"), {Qt::blue, 24}};
+    const TextAnnotation text{{12, 18}, QStringLiteral("Wide\nI"), {Qt::blue, 24}};
     const QFont font = resolvedAnnotationFont(24);
     const QFontMetricsF metrics(font);
     const QRectF logical = textLogicalRect(text);
@@ -87,7 +87,7 @@ TEST_CASE("annotation text font resolves through the required fallback chain") {
 
 TEST_CASE("annotation text output starts at its baseline and matches fixed physical pixels") {
     static_cast<void>(textApplication());
-    const TextAnnotation text{{16, 18}, QStringLiteral("Hi\\nQt"), {Qt::red, 24}};
+    const TextAnnotation text{{16, 18}, QStringLiteral("Hi\nQt"), {Qt::red, 24}};
     const auto snapshot = textSnapshot(text);
     const QImage actual = composeAnnotations(snapshot);
     QImage expected = snapshot.base.copy();

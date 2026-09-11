@@ -43,6 +43,9 @@ class SnipOverlay final : public QWidget {
                               annotation::AnnotationInteraction* interaction,
                               QRect lockedSelection);
     void clearAnnotationContext();
+    [[nodiscard]] bool isToolbarHost() const noexcept;
+    void createTextEditor(QPointF anchor);
+    void editTextEditor(annotation::AnnotationId id);
 
   signals:
     void selectionChanged();
@@ -55,6 +58,8 @@ class SnipOverlay final : public QWidget {
     void annotationUndoRequested();
     void annotationRedoRequested();
     void annotationDeleteRequested();
+    void annotationTextCreateRequested(QPointF anchor);
+    void annotationTextEditRequested(annotation::AnnotationId id);
 
   protected:
     void closeEvent(QCloseEvent* event) override;

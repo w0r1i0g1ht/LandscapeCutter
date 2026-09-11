@@ -5,6 +5,7 @@
 #include <QElapsedTimer>
 #include <QMouseEvent>
 #include <QPainter>
+#include <QPlainTextEdit>
 #include <QTemporaryDir>
 #include <QThread>
 #include <QToolButton>
@@ -659,5 +660,48 @@ TEST_CASE("annotating across monitors keeps one toolbar host while a draft is li
     overlays.front()->annotationChanged();
 
     CHECK(visibleToolbarCount(overlays) == 1);
+    session.cancel();
+}
+
+TEST_CASE("a text click on a non-host overlay creates the editor on the toolbar host") {
+    int argc = 1;
+    char name[] = "annotation-text-host-routing-test";
+    char* argv[] = {name, nullptr};
+    QApplication app(argc, argv);
+    SessionService service;
+    SessionRecovery recovery;
+    lc::snip::SnapshotBatch batch(service, recovery, {});
+    ControlledPreparation preparation;
+    lc::snip::SnipSession session(batch, preparation.function());
+    lc::platform::windows::MonitorDescriptor left{}, right{};
+    left.desktopRect = {0, 0, 20, 20};
+    left.catalogGeneration = 1;
+    right.desktopRect = {20, 0, 40, 20};
+    right.catalogGeneration = 1;
+    session.begin({left, right});
+    QImage image(20, 20, QImage::Format_RGB32);
+    image.fill(Qt::white);
+    batch.ready({{{0, 0, 20, 20}, image}, {{20, 0, 20, 20}, image}});
+    session.selection().press({5, 5}, 0);
+    session.selection().move({35, 15});
+    session.selection().release();
+    session.beginAnnotation(lc::annotation::AnnotationTool::Text);
+    preparation.complete(QImage(30, 10, QImage::Format_RGB32));
+    app.processEvents();
+    const auto overlays = activeOverlays();
+    REQUIRE(overlays.size() == 2);
+    const auto host = std::find_if(overlays.begin(), overlays.end(),
+                                   [](const auto* overlay) { return overlay->isToolbarHost(); });
+    REQUIRE(host != overlays.end());
+    const auto passive = std::find_if(overlays.begin(), overlays.end(),
+                                      [host](const auto* overlay) { return overlay != *host; });
+    REQUIRE(passive != overlays.end());
+
+    QMouseEvent press{QEvent::MouseButtonPress, QPointF{3, 3}, QPointF{3, 3},
+                      Qt::LeftButton, Qt::LeftButton, Qt::NoModifier};
+    QApplication::sendEvent(*passive, &press);
+
+    CHECK((*passive)->findChild<QPlainTextEdit*>("annotationTextEditor") == nullptr);
+    CHECK((*host)->findChild<QPlainTextEdit*>("annotationTextEditor") != nullptr);
     session.cancel();
 }

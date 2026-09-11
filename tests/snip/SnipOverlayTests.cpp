@@ -2,10 +2,12 @@
 #include "annotation/AnnotationInteraction.hpp"
 
 #include <QApplication>
+#include <QClipboard>
 #include <QKeyEvent>
 #include <QMouseEvent>
 #include <QPainter>
 #include <QPlainTextEdit>
+#include <QTextCursor>
 #include <QToolButton>
 
 #include <catch2/catch_test_macros.hpp>
@@ -349,13 +351,13 @@ TEST_CASE("annotation text editor exists only on the active toolbar host and com
     host.setToolbarHost(true);
     passive.setAnnotationContext(&document, &interaction, {0, 0, 40, 30});
     host.setAnnotationContext(&document, &interaction, {0, 0, 40, 30});
+    QObject::connect(&passive, &SnipOverlay::annotationTextCreateRequested, &host,
+                     [&host](QPointF anchor) { host.createTextEditor(anchor); });
 
     QMouseEvent press{QEvent::MouseButtonPress, QPointF{5, 6}, QPointF{5, 6},
                       Qt::LeftButton, Qt::LeftButton, Qt::NoModifier};
     QApplication::sendEvent(&passive, &press);
     CHECK(passive.findChild<QPlainTextEdit*>("annotationTextEditor") == nullptr);
-
-    QApplication::sendEvent(&host, &press);
     auto* editor = host.findChild<QPlainTextEdit*>("annotationTextEditor");
     REQUIRE(editor != nullptr);
     editor->setPlainText(QStringLiteral("first"));
@@ -391,11 +393,28 @@ TEST_CASE("annotation text editor keeps editing shortcuts local and escapes with
     auto* editor = overlay.findChild<QPlainTextEdit*>("annotationTextEditor");
     REQUIRE(editor != nullptr);
     editor->setPlainText(QStringLiteral("a"));
-    QKeyEvent enter{QEvent::KeyPress, Qt::Key_Return, Qt::NoModifier};
+    editor->moveCursor(QTextCursor::End);
+    QKeyEvent enter{QEvent::KeyPress, Qt::Key_Return, Qt::NoModifier, QStringLiteral("\n")};
     QApplication::sendEvent(editor, &enter);
-    CHECK(editor->toPlainText() == QStringLiteral("a\\n"));
+    CHECK(editor->toPlainText() == QStringLiteral("a\n"));
+    QKeyEvent undo{QEvent::KeyPress, Qt::Key_Z, Qt::ControlModifier};
+    QApplication::sendEvent(editor, &undo);
+    CHECK(editor->toPlainText() == QStringLiteral("a"));
+    QKeyEvent redoWithControlY{QEvent::KeyPress, Qt::Key_Y, Qt::ControlModifier};
+    QApplication::sendEvent(editor, &redoWithControlY);
+    CHECK(editor->toPlainText() == QStringLiteral("a\n"));
+    QApplication::sendEvent(editor, &undo);
+    CHECK(editor->toPlainText() == QStringLiteral("a"));
+    QKeyEvent redo{QEvent::KeyPress, Qt::Key_Z, Qt::ControlModifier | Qt::ShiftModifier};
+    QApplication::sendEvent(editor, &redo);
+    CHECK(editor->toPlainText() == QStringLiteral("a\n"));
+    editor->selectAll();
     QKeyEvent copy{QEvent::KeyPress, Qt::Key_C, Qt::ControlModifier};
     QApplication::sendEvent(editor, &copy);
+    CHECK(QApplication::clipboard()->text() == QStringLiteral("a\n"));
+    QKeyEvent erase{QEvent::KeyPress, Qt::Key_Delete, Qt::NoModifier};
+    QApplication::sendEvent(editor, &erase);
+    CHECK(editor->toPlainText().isEmpty());
     QKeyEvent save{QEvent::KeyPress, Qt::Key_S, Qt::ControlModifier};
     QApplication::sendEvent(editor, &save);
     CHECK(copies == 0);

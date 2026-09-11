@@ -33,6 +33,14 @@ catch_discover_tests(landscapecutter_annotation_tests
         ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
 )
 
+add_custom_command(TARGET landscapecutter_annotation_tests POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E make_directory
+        "$<TARGET_FILE_DIR:landscapecutter_annotation_tests>/platforms"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "$<TARGET_FILE:Qt6::QOffscreenIntegrationPlugin>"
+        "$<TARGET_FILE_DIR:landscapecutter_annotation_tests>/platforms"
+)
+
 target_link_libraries(landscapecutter_unit_tests PRIVATE
     Catch2::Catch2WithMain
     landscapecutter_app_core

@@ -9,6 +9,8 @@
 #include <QMessageBox>
 #include <QStandardPaths>
 
+#include <algorithm>
+
 namespace lc::snip {
 SnipSession::SnipSession(SnapshotBatch& batch, QObject* parent) : QObject(parent), batch_(batch) {
     workers_.setMaxThreadCount(1);
@@ -131,6 +133,24 @@ void SnipSession::open(std::vector<FrozenMonitor> images) {
                     window->refresh();
             }
         });
+        connect(overlay.get(), &SnipOverlay::annotationTextCreateRequested, this,
+                [this](QPointF anchor) {
+                    if (state_ != SnipSessionState::Annotating)
+                        return;
+                    const auto host = std::find_if(overlays_.begin(), overlays_.end(),
+                                                   [](const auto& window) { return window->isToolbarHost(); });
+                    if (host != overlays_.end())
+                        (*host)->createTextEditor(anchor);
+                });
+        connect(overlay.get(), &SnipOverlay::annotationTextEditRequested, this,
+                [this](annotation::AnnotationId id) {
+                    if (state_ != SnipSessionState::Annotating)
+                        return;
+                    const auto host = std::find_if(overlays_.begin(), overlays_.end(),
+                                                   [](const auto& window) { return window->isToolbarHost(); });
+                    if (host != overlays_.end())
+                        (*host)->editTextEditor(id);
+                });
         connect(overlay.get(), &SnipOverlay::displayInvalidated, this, &SnipSession::cancel,
                 Qt::QueuedConnection);
         overlays_.push_back(std::move(overlay));
