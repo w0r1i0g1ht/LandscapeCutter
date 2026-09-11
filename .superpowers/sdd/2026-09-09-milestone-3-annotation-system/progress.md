@@ -104,6 +104,15 @@ Preflight result: no unresolved contradictions between tasks, the plan's global 
 - Re-review round 1: all three findings addressed; no new Critical/Important breakage.
 - Task 5: complete (commits `eb56db8..1171129`, review clean)
 
+## Task 6: Deterministic Mosaic Tool
+
+- Base: `9b266fcd9f52b709350b319c3741baae34b0978b`
+- Brief: `.superpowers/sdd/2026-09-09-milestone-3-annotation-system/task-6-brief.md`
+- Ruling: expose mosaic block size with an integer `QSpinBox` range of 1–128 and default 12, because the spec requires a positive integer control and fixes only the default. Cost if wrong: the UI range can be adjusted without changing document or renderer semantics.
+- Ruling: a partial mosaic cell samples and fills only the intersection of the document-origin-aligned cell, the mosaic rectangle, and the immutable base. This gives the specified clipped edge-cell arithmetic without sampling pixels outside the selected mosaic area. Cost if wrong: only edge-cell colors change; object storage and grid alignment remain compatible.
+- Process baseline: protected stale app-controller PIDs `14104`, `20732`, `24440`, and `27444`; no new residual PID is acceptable.
+- Status: implementation in progress
+
 ## Task 3: Snip Session Annotation State and Cancellable Base Preparation
 
 - Base: `4b4f3a057dfd2ae4526e701832093bf4e94120b4`
