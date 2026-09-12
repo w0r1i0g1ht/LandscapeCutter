@@ -13,6 +13,8 @@ class AnnotationInteraction final {
     [[nodiscard]] AnnotationTool tool() const noexcept;
     void setStyle(AnnotationStyle style);
     [[nodiscard]] AnnotationStyle style() const noexcept;
+    void setMosaicBlockSize(int blockSize) noexcept;
+    [[nodiscard]] int mosaicBlockSize() const noexcept;
 
     void press(QPointF point);
     void move(QPointF point);
@@ -39,6 +41,7 @@ class AnnotationInteraction final {
     AnnotationDocument& document_;
     AnnotationTool tool_{AnnotationTool::Select};
     AnnotationStyle style_{};
+    int mosaicBlockSize_{12};
     std::optional<AnnotationObject> draft_;
     std::optional<AnnotationObject> editBefore_;
     QPointF pressedPoint_;

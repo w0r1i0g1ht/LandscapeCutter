@@ -132,6 +132,27 @@ AnnotationStyle AnnotationInteraction::style() const noexcept {
     return style_;
 }
 
+void AnnotationInteraction::setMosaicBlockSize(int blockSize) noexcept {
+    mosaicBlockSize_ = std::clamp(blockSize, 1, 128);
+    const auto selected = document_.selectedId();
+    if (!selected.has_value())
+        return;
+    const auto found = std::find_if(document_.objects().begin(), document_.objects().end(),
+                                    [selected](const AnnotationObject& object) {
+                                        return object.id == *selected;
+                                    });
+    if (found == document_.objects().end() ||
+        !std::holds_alternative<MosaicAnnotation>(found->payload))
+        return;
+    auto replacement = *found;
+    std::get<MosaicAnnotation>(replacement.payload).blockSize = mosaicBlockSize_;
+    static_cast<void>(document_.replaceObject(std::move(replacement)));
+}
+
+int AnnotationInteraction::mosaicBlockSize() const noexcept {
+    return mosaicBlockSize_;
+}
+
 void AnnotationInteraction::press(QPointF point) {
     cancelDraft();
     pressedPoint_ = clip(point);
@@ -193,12 +214,16 @@ bool AnnotationInteraction::deleteSelection() {
 }
 
 std::optional<AnnotationId> AnnotationInteraction::hitTest(QPointF point) const {
-    for (auto position = document_.objects().rbegin(); position != document_.objects().rend(); ++position) {
+    for (const bool mosaicLayer : {false, true}) {
+        for (auto position = document_.objects().rbegin(); position != document_.objects().rend(); ++position) {
+        if (std::holds_alternative<MosaicAnnotation>(position->payload) != mosaicLayer)
+            continue;
         const auto hit = std::visit(
             [point](const auto& value) {
                 using Value = std::decay_t<decltype(value)>;
                 if constexpr (std::is_same_v<Value, RectangleAnnotation> ||
-                              std::is_same_v<Value, EllipseAnnotation>) {
+                              std::is_same_v<Value, EllipseAnnotation> ||
+                              std::is_same_v<Value, MosaicAnnotation>) {
                     return value.rect.normalized().contains(point);
                 } else if constexpr (std::is_same_v<Value, ArrowAnnotation>) {
                     return pointToSegmentDistance(point, value.start, value.end) <= lineTolerance(value.style);
@@ -220,6 +245,7 @@ std::optional<AnnotationId> AnnotationInteraction::hitTest(QPointF point) const 
             position->payload);
         if (hit)
             return position->id;
+        }
     }
     return std::nullopt;
 }
@@ -257,6 +283,9 @@ void AnnotationInteraction::createDraft(QPointF point) {
     case AnnotationTool::Freehand:
         draft_ = AnnotationObject{0, FreehandAnnotation{{point}, style_}};
         break;
+    case AnnotationTool::Mosaic:
+        draft_ = AnnotationObject{0, MosaicAnnotation{{point, point}, mosaicBlockSize_}};
+        break;
     default:
         break;
     }
@@ -267,7 +296,8 @@ void AnnotationInteraction::updateDraft(QPointF point) {
         [this, point](auto& value) {
             using Value = std::decay_t<decltype(value)>;
             if constexpr (std::is_same_v<Value, RectangleAnnotation> ||
-                          std::is_same_v<Value, EllipseAnnotation>) {
+                          std::is_same_v<Value, EllipseAnnotation> ||
+                          std::is_same_v<Value, MosaicAnnotation>) {
                 value.rect = QRectF(pressedPoint_, point).normalized().intersected(bounds());
             } else if constexpr (std::is_same_v<Value, ArrowAnnotation>) {
                 value.end = point;
@@ -295,7 +325,8 @@ void AnnotationInteraction::updateEdit(QPointF point) {
         [this, point](auto& value) {
             using Value = std::decay_t<decltype(value)>;
             if constexpr (std::is_same_v<Value, RectangleAnnotation> ||
-                          std::is_same_v<Value, EllipseAnnotation>) {
+                          std::is_same_v<Value, EllipseAnnotation> ||
+                          std::is_same_v<Value, MosaicAnnotation>) {
                 const auto rect = value.rect.normalized();
                 QPointF opposite;
                 switch (editMode_) {
@@ -331,7 +362,8 @@ AnnotationInteraction::EditMode AnnotationInteraction::editModeFor(const Annotat
         [point](const auto& value) {
             using Value = std::decay_t<decltype(value)>;
             if constexpr (std::is_same_v<Value, RectangleAnnotation> ||
-                          std::is_same_v<Value, EllipseAnnotation>) {
+                          std::is_same_v<Value, EllipseAnnotation> ||
+                          std::is_same_v<Value, MosaicAnnotation>) {
                 const auto rect = value.rect.normalized();
                 const std::array handles{
                     std::pair{EditMode::ResizeTopLeft, rect.topLeft()},

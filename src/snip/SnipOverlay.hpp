@@ -20,6 +20,8 @@ class QResizeEvent;
 class QShowEvent;
 class QToolButton;
 class QDoubleSpinBox;
+class QHBoxLayout;
+class QSpinBox;
 class QPlainTextEdit;
 
 namespace lc::annotation {
@@ -86,6 +88,7 @@ class SnipOverlay final : public QWidget {
     void beginTextEditor(QPointF anchor, std::optional<annotation::AnnotationObject> original = std::nullopt);
     void commitTextEditor();
     void cancelTextEditor();
+    void ensureMosaicBlockSizeControl();
     void positionToolbar();
     void requestCopyIfSelected();
     void requestSaveIfSelected();
@@ -103,11 +106,14 @@ class SnipOverlay final : public QWidget {
     QToolButton* arrowToolButton_{};
     QToolButton* brushToolButton_{};
     QToolButton* textToolButton_{};
+    QToolButton* mosaicToolButton_{};
     QToolButton* colorButton_{};
     QToolButton* undoButton_{};
     QToolButton* redoButton_{};
     QToolButton* deleteButton_{};
+    QHBoxLayout* toolbarLayout_{};
     QDoubleSpinBox* lineWidth_{};
+    QSpinBox* mosaicBlockSize_{};
     annotation::AnnotationDocument* document_{};
     annotation::AnnotationInteraction* interaction_{};
     QPointer<QPlainTextEdit> textEditor_;

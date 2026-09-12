@@ -1,5 +1,6 @@
 #include "snip/SnipOverlay.hpp"
 #include "annotation/AnnotationInteraction.hpp"
+#include "annotation/AnnotationRenderer.hpp"
 
 #include <QApplication>
 #include <QClipboard>
@@ -7,6 +8,8 @@
 #include <QMouseEvent>
 #include <QPainter>
 #include <QPlainTextEdit>
+#include <QRegion>
+#include <QSpinBox>
 #include <QTextCursor>
 #include <QToolButton>
 
@@ -238,6 +241,33 @@ TEST_CASE("annotation overlay presents all Task 4 controls on the toolbar host")
     CHECK(overlay.findChild<QToolButton*>("deleteButton") != nullptr);
 }
 
+TEST_CASE("annotation mosaic toolbar selects the tool and exposes its bounded block control") {
+    ApplicationFixture fixture;
+    SelectionModel selection;
+    selection.setBounds({0, 0, 40, 30});
+    auto document = annotationDocument();
+    AnnotationInteraction interaction(document);
+    SnipOverlay overlay{frozenMonitor(), selection};
+    overlay.setToolbarHost(true);
+    overlay.setAnnotationContext(&document, &interaction, {-40, 10, 40, 30});
+
+    auto* mosaic = overlay.findChild<QToolButton*>("mosaicToolButton");
+    auto* blockSize = overlay.findChild<QSpinBox*>("mosaicBlockSizeSpinBox");
+    REQUIRE(mosaic != nullptr);
+    REQUIRE(blockSize != nullptr);
+    CHECK(blockSize->minimum() == 1);
+    CHECK(blockSize->maximum() == 128);
+    CHECK(blockSize->value() == 12);
+
+    QObject::connect(&overlay, &SnipOverlay::annotationToolRequested, [&interaction](AnnotationTool tool) {
+        interaction.setTool(tool);
+    });
+    mosaic->click();
+    blockSize->setValue(7);
+    CHECK(interaction.tool() == AnnotationTool::Mosaic);
+    CHECK(interaction.mosaicBlockSize() == 7);
+}
+
 TEST_CASE("annotation overlay cancels a draft before requesting whole-session cancellation") {
     ApplicationFixture fixture;
     SelectionModel selection;
@@ -288,6 +318,33 @@ TEST_CASE("annotation overlay clips one shared preview across monitor boundaries
     CHECK(rightPreview.pixelColor(15, 5) != QColor(Qt::white));
     CHECK(leftPreview.pixelColor(19, 18) == QColor(Qt::white));
     CHECK(rightPreview.pixelColor(0, 18) == QColor(Qt::white));
+}
+
+TEST_CASE("annotation mosaic overlay previews join exactly at a monitor boundary") {
+    ApplicationFixture fixture;
+    SelectionModel selection;
+    selection.setBounds({0, 0, 40, 20});
+    QImage base({40, 20}, QImage::Format_RGB32);
+    for (int y = 0; y < base.height(); ++y) {
+        for (int x = 0; x < base.width(); ++x)
+            base.setPixelColor(x, y, {2 * x + y, 3 * x + 2 * y, 4 * x + 3 * y});
+    }
+    AnnotationDocument document(base);
+    REQUIRE(document.addObject(MosaicAnnotation{{5, 1, 31, 18}, 7}).has_value());
+    AnnotationInteraction interaction(document);
+    SnipOverlay left{{{0, 0, 20, 20}, base.copy(0, 0, 20, 20)}, selection};
+    SnipOverlay right{{{20, 0, 20, 20}, base.copy(20, 0, 20, 20)}, selection};
+    left.setToolbarHost(false);
+    right.setToolbarHost(false);
+    left.setAnnotationContext(&document, &interaction, {0, 0, 40, 20});
+    right.setAnnotationContext(&document, &interaction, {0, 0, 40, 20});
+
+    QImage assembled({40, 20}, QImage::Format_RGB32);
+    QPainter painter(&assembled);
+    left.render(&painter, {0, 0}, QRegion{0, 0, 20, 20});
+    right.render(&painter, {20, 0}, QRegion{0, 0, 20, 20});
+    painter.end();
+    CHECK(assembled == composeAnnotations(document.snapshot()));
 }
 
 TEST_CASE("annotation overlay replaces a moved draft in every shared preview") {

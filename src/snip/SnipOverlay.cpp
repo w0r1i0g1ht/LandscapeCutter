@@ -14,6 +14,7 @@
 #include <QPainter>
 #include <QPainterPath>
 #include <QPlainTextEdit>
+#include <QSpinBox>
 #include <QResizeEvent>
 #include <QScreen>
 #include <QShowEvent>
@@ -67,6 +68,7 @@ SnipOverlay::SnipOverlay(FrozenMonitor monitor, SelectionModel& selection, QWidg
     toolbar_ = new QWidget(this);
     toolbar_->setObjectName(QStringLiteral("snipToolbar"));
     auto* layout = new QHBoxLayout(toolbar_);
+    toolbarLayout_ = layout;
     layout->setContentsMargins(4, 4, 4, 4);
     layout->setSpacing(4);
 
@@ -93,6 +95,8 @@ SnipOverlay::SnipOverlay(FrozenMonitor monitor, SelectionModel& selection, QWidg
                                annotation::AnnotationTool::Freehand);
     textToolButton_ = addTool(QStringLiteral("textToolButton"), tr("文字"),
                               annotation::AnnotationTool::Text);
+    mosaicToolButton_ = addTool(QStringLiteral("mosaicToolButton"), tr("马赛克"),
+                                annotation::AnnotationTool::Mosaic);
     colorButton_ = new QToolButton(toolbar_);
     colorButton_->setObjectName(QStringLiteral("colorButton"));
     colorButton_->setText(tr("颜色"));
@@ -178,13 +182,18 @@ void SnipOverlay::refresh() {
     arrowToolButton_->setVisible(toolPickerAvailable);
     brushToolButton_->setVisible(toolPickerAvailable);
     textToolButton_->setVisible(toolPickerAvailable);
+    mosaicToolButton_->setVisible(toolPickerAvailable);
     colorButton_->setVisible(annotationActive);
     lineWidth_->setVisible(annotationActive);
+    if (mosaicBlockSize_)
+        mosaicBlockSize_->setVisible(annotationActive && interaction_->tool() == annotation::AnnotationTool::Mosaic);
     undoButton_->setVisible(annotationActive);
     redoButton_->setVisible(annotationActive);
     deleteButton_->setVisible(annotationActive);
     if (annotationActive) {
         lineWidth_->setValue(interaction_->style().physicalSize);
+        if (mosaicBlockSize_)
+            mosaicBlockSize_->setValue(interaction_->mosaicBlockSize());
         undoButton_->setEnabled(document_->canUndo() && !busy_);
         redoButton_->setEnabled(document_->canRedo() && !busy_);
         deleteButton_->setEnabled(document_->selectedId().has_value() && !busy_);
@@ -250,6 +259,8 @@ void SnipOverlay::setBusy(bool busy) {
 void SnipOverlay::setToolbarHost(const bool toolbarHost) {
     toolbarHostAssigned_ = true;
     toolbarHost_ = toolbarHost;
+    if (toolbarHost_)
+        ensureMosaicBlockSizeControl();
     if (!ownsToolbar())
         cancelTextEditor();
     refresh();
@@ -580,6 +591,21 @@ QRectF SnipOverlay::selectionInLocalCoordinates() const {
     return {(selection.x() - monitor_.geometry.x()) * horizontalScale,
             (selection.y() - monitor_.geometry.y()) * verticalScale,
             selection.width() * horizontalScale, selection.height() * verticalScale};
+}
+
+void SnipOverlay::ensureMosaicBlockSizeControl() {
+    if (mosaicBlockSize_)
+        return;
+    mosaicBlockSize_ = new QSpinBox(toolbar_);
+    mosaicBlockSize_->setObjectName(QStringLiteral("mosaicBlockSizeSpinBox"));
+    mosaicBlockSize_->setRange(1, 128);
+    mosaicBlockSize_->setValue(12);
+    mosaicBlockSize_->setFocusPolicy(Qt::NoFocus);
+    toolbarLayout_->addWidget(mosaicBlockSize_);
+    connect(mosaicBlockSize_, &QSpinBox::valueChanged, this, [this](int blockSize) {
+        if (interaction_)
+            interaction_->setMosaicBlockSize(blockSize);
+    });
 }
 
 QPointF SnipOverlay::annotationPoint(const QMouseEvent* event) const {

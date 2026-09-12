@@ -9,6 +9,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 #include <numbers>
 #include <type_traits>
 
@@ -36,9 +37,53 @@ void drawText(QPainter& painter, const TextAnnotation& text) {
     }
 }
 
-void drawObject(QPainter& painter, const AnnotationObject& object) {
+void drawMosaic(QPainter& painter, const MosaicAnnotation& mosaic, const QImage& base) {
+    if (mosaic.blockSize <= 0 || base.isNull())
+        return;
+    const QRectF region = mosaic.rect.normalized().intersected(QRectF(base.rect()));
+    if (region.isEmpty())
+        return;
+
+    const int blockSize = mosaic.blockSize;
+    const int firstX = static_cast<int>(std::floor(region.left() / blockSize)) * blockSize;
+    const int firstY = static_cast<int>(std::floor(region.top() / blockSize)) * blockSize;
+    painter.setPen(Qt::NoPen);
+    for (int cellY = firstY; cellY < region.bottom(); cellY += blockSize) {
+        for (int cellX = firstX; cellX < region.right(); cellX += blockSize) {
+            const QRectF cell{static_cast<qreal>(cellX), static_cast<qreal>(cellY),
+                              static_cast<qreal>(blockSize), static_cast<qreal>(blockSize)};
+            const QRectF intersection = cell.intersected(region);
+            const int left = std::max(0, qCeil(intersection.left()));
+            const int top = std::max(0, qCeil(intersection.top()));
+            const int right = std::min(base.width(), qCeil(intersection.right()));
+            const int bottom = std::min(base.height(), qCeil(intersection.bottom()));
+            if (left >= right || top >= bottom)
+                continue;
+
+            std::int64_t red{};
+            std::int64_t green{};
+            std::int64_t blue{};
+            const std::int64_t count = static_cast<std::int64_t>(right - left) * (bottom - top);
+            for (int y = top; y < bottom; ++y) {
+                for (int x = left; x < right; ++x) {
+                    const QColor color = base.pixelColor(x, y);
+                    red += color.red();
+                    green += color.green();
+                    blue += color.blue();
+                }
+            }
+            const QColor average{static_cast<int>((red + count / 2) / count),
+                                 static_cast<int>((green + count / 2) / count),
+                                 static_cast<int>((blue + count / 2) / count)};
+            painter.setBrush(average);
+            painter.drawRect(QRectF(left, top, right - left, bottom - top));
+        }
+    }
+}
+
+void drawObject(QPainter& painter, const AnnotationObject& object, const QImage& base) {
     std::visit(
-        [&painter](const auto& payload) {
+        [&painter, &base](const auto& payload) {
             using Payload = std::decay_t<decltype(payload)>;
             if constexpr (std::is_same_v<Payload, RectangleAnnotation>) {
                 painter.setPen(annotationPen(payload.style));
@@ -70,6 +115,8 @@ void drawObject(QPainter& painter, const AnnotationObject& object) {
                 painter.drawPath(path);
             } else if constexpr (std::is_same_v<Payload, TextAnnotation>) {
                 drawText(painter, payload);
+            } else if constexpr (std::is_same_v<Payload, MosaicAnnotation>) {
+                drawMosaic(painter, payload, base);
             }
         },
         object.payload);
@@ -127,9 +174,12 @@ void drawAnnotations(QPainter& painter, const AnnotationSnapshot& snapshot,
     painter.setWorldTransform(QTransform{}, false);
     painter.setClipRect(targetClip, Qt::ReplaceClip);
     painter.setWorldTransform(documentToTarget, false);
-    for (const auto& object : snapshot.objects) {
-        drawObject(painter, object);
-    }
+    for (const auto& object : snapshot.objects)
+        if (std::holds_alternative<MosaicAnnotation>(object.payload))
+            drawObject(painter, object, snapshot.base);
+    for (const auto& object : snapshot.objects)
+        if (!std::holds_alternative<MosaicAnnotation>(object.payload))
+            drawObject(painter, object, snapshot.base);
     painter.restore();
 }
 
