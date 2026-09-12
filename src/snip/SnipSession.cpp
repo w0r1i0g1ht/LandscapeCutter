@@ -46,6 +46,7 @@ void SnipSession::begin(std::vector<platform::windows::MonitorDescriptor> monito
     if (active_)
         return;
     cancellation_ = std::make_shared<std::atomic_bool>(false);
+    exportFinalizationMutex_ = std::make_shared<std::mutex>();
     active_ = true;
     preparing_ = true;
     state_ = SnipSessionState::PreparingCapture;
@@ -53,8 +54,14 @@ void SnipSession::begin(std::vector<platform::windows::MonitorDescriptor> monito
     batch_.start(std::move(monitors));
 }
 void SnipSession::cancel() {
-    if (cancellation_)
-        cancellation_->store(true, std::memory_order_release);
+    if (cancellation_) {
+        if (exportFinalizationMutex_) {
+            const std::lock_guard lock(*exportFinalizationMutex_);
+            cancellation_->store(true, std::memory_order_release);
+        } else {
+            cancellation_->store(true, std::memory_order_release);
+        }
+    }
     active_ = false;
     preparing_ = false;
     busy_ = false;
@@ -289,9 +296,11 @@ void SnipSession::exportImage(QString path, QByteArray format) {
     const auto rect = selection_.rect();
     const auto images = images_;
     const auto cancellation = cancellation_;
+    const auto finalizationMutex = exportFinalizationMutex_;
     const QPointer<SnipSession> session(this);
     workers_.start([session, requestId, rect, images, annotationSnapshot = std::move(annotationSnapshot),
-                    annotated, sourceState, path = std::move(path), format = std::move(format), cancellation] {
+                    annotated, sourceState, path = std::move(path), format = std::move(format), cancellation,
+                    finalizationMutex] {
         QImage result;
         QString error;
         try {
@@ -300,7 +309,7 @@ void SnipSession::exportImage(QString path, QByteArray format) {
             if (result.isNull())
                 error = QStringLiteral("选区没有有效画面，或图像过大。");
             else if (!path.isEmpty())
-                error = saveImage(result, path, format, cancellation.get());
+                error = saveImage(result, path, format, cancellation.get(), finalizationMutex.get());
         } catch (...) {
             error = QStringLiteral("图像处理失败，请缩小选区后重试。");
         }

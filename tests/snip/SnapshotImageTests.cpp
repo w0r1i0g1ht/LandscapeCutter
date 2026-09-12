@@ -3,8 +3,11 @@
 #include <QFile>
 #include <QTemporaryDir>
 #include <catch2/catch_test_macros.hpp>
+#include <chrono>
 #include <cmath>
 #include <cstring>
+#include <future>
+#include <mutex>
 
 using namespace lc::snip;
 TEST_CASE("snip readback respects padded rows and owns pixels") {
@@ -102,4 +105,31 @@ TEST_CASE("snip cancelled export leaves an existing destination untouched") {
 
     CHECK_FALSE(saveImage(blue, path, "png", &cancelled).isEmpty());
     CHECK(QImage(path).pixelColor(0, 0) == QColor(Qt::red));
+}
+
+TEST_CASE("snip cancellation and atomic commit share one finalization boundary") {
+    int argc = 1;
+    char name[] = "cancel-commit-race-test";
+    char* argv[] = {name, nullptr};
+    QCoreApplication app(argc, argv);
+    QTemporaryDir dir;
+    REQUIRE(dir.isValid());
+    const auto path = dir.filePath("race.png");
+    QImage image(1, 1, QImage::Format_RGB32);
+    image.fill(Qt::blue);
+    std::atomic_bool cancelled = false;
+    std::mutex finalization;
+    std::unique_lock cancellationLock(finalization);
+
+    auto saving = std::async(std::launch::async, [&] {
+        return saveImage(image, path, "png", &cancelled, &finalization);
+    });
+    const auto statusWhileLocked = saving.wait_for(std::chrono::seconds(2));
+    cancelled.store(true, std::memory_order_release);
+    cancellationLock.unlock();
+
+    const auto error = saving.get();
+    REQUIRE(statusWhileLocked == std::future_status::timeout);
+    CHECK_FALSE(error.isEmpty());
+    CHECK_FALSE(QFile::exists(path));
 }

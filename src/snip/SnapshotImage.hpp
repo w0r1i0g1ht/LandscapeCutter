@@ -4,6 +4,7 @@
 #include <QRect>
 #include <QString>
 #include <atomic>
+#include <mutex>
 #include <vector>
 
 namespace lc::snip {
@@ -15,5 +16,6 @@ struct FrozenMonitor {
 QImage imageFromReadback(const graphics::d3d11::TextureReadback& raw);
 QImage composeSelection(const std::vector<FrozenMonitor>& monitors, QRect selection);
 QString saveImage(const QImage& image, const QString& path, const QByteArray& format,
-                  const std::atomic_bool* cancelled = nullptr);
+                  const std::atomic_bool* cancelled = nullptr,
+                  std::mutex* finalizationMutex = nullptr);
 } // namespace lc::snip

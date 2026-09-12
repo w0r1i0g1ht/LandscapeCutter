@@ -94,7 +94,7 @@ QImage composeSelection(const std::vector<FrozenMonitor>& monitors, QRect select
     return result;
 }
 QString saveImage(const QImage& image, const QString& path, const QByteArray& format,
-                  const std::atomic_bool* cancelled) {
+                  const std::atomic_bool* cancelled, std::mutex* finalizationMutex) {
     if (image.isNull())
         return QStringLiteral("没有可保存的图像。");
     if (cancelled != nullptr && cancelled->load(std::memory_order_acquire)) {
@@ -111,6 +111,9 @@ QString saveImage(const QImage& image, const QString& path, const QByteArray& fo
         file.cancelWriting();
         return writer.errorString();
     }
+    std::unique_lock<std::mutex> finalizationLock;
+    if (finalizationMutex != nullptr)
+        finalizationLock = std::unique_lock<std::mutex>(*finalizationMutex);
     if (cancelled != nullptr && cancelled->load(std::memory_order_acquire)) {
         file.cancelWriting();
         return QStringLiteral("保存已取消。");

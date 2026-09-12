@@ -9,6 +9,7 @@
 #include <QThreadPool>
 #include <atomic>
 #include <memory>
+#include <mutex>
 
 class QFileDialog;
 namespace lc::snip {
@@ -82,6 +83,7 @@ class SnipSession final : public QObject {
     PrepareAnnotation preparation_;
     ChooseSavePath savePathChooser_;
     std::shared_ptr<std::atomic_bool> cancellation_;
+    std::shared_ptr<std::mutex> exportFinalizationMutex_;
     std::unique_ptr<annotation::AnnotationDocument> document_;
     std::unique_ptr<annotation::AnnotationInteraction> interaction_;
     annotation::AnnotationTool tool_{annotation::AnnotationTool::Select};
