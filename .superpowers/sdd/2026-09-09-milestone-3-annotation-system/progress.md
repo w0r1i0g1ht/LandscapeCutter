@@ -134,4 +134,5 @@ Preflight result: no unresolved contradictions between tasks, the plan's global 
 - Review round 1: Critical 0, Important 1. The reviewer found a cancellation race between the final cancellation check and `QSaveFile::commit()`.
 - Review fix commit: `b036274 fix: serialize export cancellation and commit`.
 - Re-review round 1: the shared finalization boundary closes the original race without a deadlock or cross-session path; no new Critical or Important findings.
-- Status: implementation complete and independently reviewed Clean; milestone-wide review and manual acceptance remain.
+- Milestone-wide review (`8d0871e..98e1b1a`): Critical 0, Important 0, Minor 0. Six-tool behavior, shared rendering, cross-screen coordinates, history, text, mosaic, export/cancellation/lifecycle, and Milestone 2 compatibility were reviewed Clean.
+- Status: implementation and automated review complete; manual acceptance remains.
