@@ -1,5 +1,6 @@
 #include "snip/SnipOverlay.hpp"
 #include "snip/SnipSession.hpp"
+#include "annotation/AnnotationRenderer.hpp"
 #include <QApplication>
 #include <QClipboard>
 #include <QElapsedTimer>
@@ -773,5 +774,429 @@ TEST_CASE("a non-host text double-click replaces an empty host draft with the hi
         return overlay->template findChild<QPlainTextEdit*>("annotationTextEditor") != nullptr;
     });
     CHECK(editorCount == 1);
+    session.cancel();
+}
+
+TEST_CASE("annotated copy exports the immutable composed snapshot and clears the session") {
+    int argc = 1;
+    char name[] = "annotation-export-copy-test";
+    char* argv[] = {name, nullptr};
+    QApplication app(argc, argv);
+    SessionService service;
+    SessionRecovery recovery;
+    lc::snip::SnapshotBatch batch(service, recovery, {});
+    ControlledPreparation preparation;
+    lc::snip::SnipSession session(batch, preparation.function());
+    lc::platform::windows::MonitorDescriptor monitor{};
+    monitor.desktopRect = {0, 0, 20, 15};
+    monitor.catalogGeneration = 1;
+    session.begin({monitor});
+    batch.ready({{{0, 0, 20, 15}, annotationTestImage()}});
+    selectRect(session);
+    session.beginAnnotation(lc::annotation::AnnotationTool::Rectangle);
+    preparation.complete(annotationTestImage());
+    app.processEvents();
+    REQUIRE(session.state() == lc::snip::SnipSessionState::Annotating);
+    REQUIRE(session.document()->addObject(
+                lc::annotation::RectangleAnnotation{{2, 2, 8, 6}, {Qt::blue, 3}})
+                .has_value());
+    const auto expected = lc::annotation::composeAnnotations(session.document()->snapshot());
+
+    session.copy();
+    CHECK(session.state() == lc::snip::SnipSessionState::ExportingAnnotated);
+    QElapsedTimer timer;
+    timer.start();
+    while (session.active() && timer.elapsed() < 3000) {
+        app.processEvents();
+        QThread::msleep(1);
+    }
+    CHECK_FALSE(session.active());
+    CHECK(session.state() == lc::snip::SnipSessionState::Idle);
+    CHECK(session.document() == nullptr);
+    CHECK(app.clipboard()->image().convertToFormat(QImage::Format_RGB32) == expected);
+}
+
+TEST_CASE("save dialog cancellation restores the exact annotated editing state") {
+    int argc = 1;
+    char name[] = "annotation-export-save-cancel-test";
+    char* argv[] = {name, nullptr};
+    QApplication app(argc, argv);
+    SessionService service;
+    SessionRecovery recovery;
+    lc::snip::SnapshotBatch batch(service, recovery, {});
+    ControlledPreparation preparation;
+    ControlledSavePathChooser chooser;
+    lc::snip::SnipSession session(batch, preparation.function(), chooser.function());
+    lc::platform::windows::MonitorDescriptor monitor{};
+    monitor.desktopRect = {0, 0, 20, 15};
+    monitor.catalogGeneration = 1;
+    session.begin({monitor});
+    batch.ready({{{0, 0, 20, 15}, annotationTestImage()}});
+    selectRect(session);
+    session.beginAnnotation(lc::annotation::AnnotationTool::Rectangle);
+    preparation.complete(annotationTestImage());
+    app.processEvents();
+    REQUIRE(session.document()->addObject(
+                lc::annotation::RectangleAnnotation{{2, 2, 8, 6}, {Qt::blue, 3}})
+                .has_value());
+    REQUIRE(session.document()->canUndo());
+
+    session.save();
+    REQUIRE(session.state() == lc::snip::SnipSessionState::ChoosingSavePath);
+    REQUIRE(chooser.reject);
+    chooser.reject();
+
+    CHECK(session.state() == lc::snip::SnipSessionState::Annotating);
+    REQUIRE(session.document() != nullptr);
+    CHECK(session.document()->objects().size() == 1);
+    CHECK(session.document()->canUndo());
+    session.cancel();
+}
+
+TEST_CASE("failed direct save restores selecting with its selection") {
+    int argc = 1;
+    char name[] = "direct-export-failure-test";
+    char* argv[] = {name, nullptr};
+    QApplication app(argc, argv);
+    SessionService service;
+    SessionRecovery recovery;
+    lc::snip::SnapshotBatch batch(service, recovery, {});
+    ControlledSavePathChooser chooser;
+    lc::snip::SnipSession session(batch, {}, chooser.function());
+    lc::platform::windows::MonitorDescriptor monitor{};
+    monitor.desktopRect = {0, 0, 20, 15};
+    monitor.catalogGeneration = 1;
+    session.begin({monitor});
+    batch.ready({{{0, 0, 20, 15}, annotationTestImage()}});
+    selectRect(session);
+    const auto selected = session.selection().rect();
+    session.save();
+    REQUIRE(chooser.accept);
+    chooser.accept(QStringLiteral("Z:/missing-parent/direct.png"));
+    QElapsedTimer timer;
+    timer.start();
+    while (session.state() == lc::snip::SnipSessionState::ExportingFromSelection && timer.elapsed() < 3000) {
+        app.processEvents();
+        QThread::msleep(1);
+    }
+    CHECK(session.state() == lc::snip::SnipSessionState::Selecting);
+    CHECK(session.selection().rect() == selected);
+    session.cancel();
+}
+
+TEST_CASE("save dialog cancellation restores selecting and its exact selection") {
+    int argc = 1;
+    char name[] = "direct-export-save-cancel-test";
+    char* argv[] = {name, nullptr};
+    QApplication app(argc, argv);
+    SessionService service;
+    SessionRecovery recovery;
+    lc::snip::SnapshotBatch batch(service, recovery, {});
+    ControlledSavePathChooser chooser;
+    lc::snip::SnipSession session(batch, {}, chooser.function());
+    lc::platform::windows::MonitorDescriptor monitor{};
+    monitor.desktopRect = {0, 0, 20, 15};
+    monitor.catalogGeneration = 1;
+    session.begin({monitor});
+    batch.ready({{{0, 0, 20, 15}, annotationTestImage()}});
+    selectRect(session);
+    const auto selected = session.selection().rect();
+    session.save();
+    REQUIRE(session.state() == lc::snip::SnipSessionState::ChoosingSavePath);
+    REQUIRE(chooser.reject);
+    chooser.reject();
+    CHECK(session.state() == lc::snip::SnipSessionState::Selecting);
+    CHECK(session.selection().rect() == selected);
+    session.cancel();
+}
+
+TEST_CASE("failed annotated save preserves document and history") {
+    int argc = 1;
+    char name[] = "annotation-export-failure-test";
+    char* argv[] = {name, nullptr};
+    QApplication app(argc, argv);
+    SessionService service;
+    SessionRecovery recovery;
+    lc::snip::SnapshotBatch batch(service, recovery, {});
+    ControlledPreparation preparation;
+    ControlledSavePathChooser chooser;
+    lc::snip::SnipSession session(batch, preparation.function(), chooser.function());
+    lc::platform::windows::MonitorDescriptor monitor{};
+    monitor.desktopRect = {0, 0, 20, 15};
+    monitor.catalogGeneration = 1;
+    session.begin({monitor});
+    batch.ready({{{0, 0, 20, 15}, annotationTestImage()}});
+    selectRect(session);
+    session.beginAnnotation(lc::annotation::AnnotationTool::Rectangle);
+    preparation.complete(annotationTestImage());
+    app.processEvents();
+    REQUIRE(session.document()->addObject(
+                lc::annotation::RectangleAnnotation{{2, 2, 8, 6}, {Qt::blue, 3}})
+                .has_value());
+    session.save();
+    REQUIRE(chooser.accept);
+    chooser.accept(QStringLiteral("Z:/missing-parent/annotation.png"));
+    QElapsedTimer timer;
+    timer.start();
+    while (session.state() == lc::snip::SnipSessionState::ExportingAnnotated && timer.elapsed() < 3000) {
+        app.processEvents();
+        QThread::msleep(1);
+    }
+    CHECK(session.state() == lc::snip::SnipSessionState::Annotating);
+    REQUIRE(session.document() != nullptr);
+    CHECK(session.document()->objects().size() == 1);
+    CHECK(session.document()->canUndo());
+    session.cancel();
+}
+
+TEST_CASE("successful annotated save writes the composed snapshot and clears the session") {
+    int argc = 1;
+    char name[] = "annotation-export-save-success-test";
+    char* argv[] = {name, nullptr};
+    QApplication app(argc, argv);
+    SessionService service;
+    SessionRecovery recovery;
+    lc::snip::SnapshotBatch batch(service, recovery, {});
+    ControlledPreparation preparation;
+    ControlledSavePathChooser chooser;
+    lc::snip::SnipSession session(batch, preparation.function(), chooser.function());
+    lc::platform::windows::MonitorDescriptor monitor{};
+    monitor.desktopRect = {0, 0, 20, 15};
+    monitor.catalogGeneration = 1;
+    session.begin({monitor});
+    batch.ready({{{0, 0, 20, 15}, annotationTestImage()}});
+    selectRect(session);
+    session.beginAnnotation(lc::annotation::AnnotationTool::Rectangle);
+    preparation.complete(annotationTestImage());
+    app.processEvents();
+    REQUIRE(session.document() != nullptr);
+    REQUIRE(session.document()->addObject(
+                lc::annotation::RectangleAnnotation{{2, 2, 8, 6}, {Qt::blue, 3}})
+                .has_value());
+    const auto expected = lc::annotation::composeAnnotations(session.document()->snapshot());
+    QTemporaryDir directory;
+    REQUIRE(directory.isValid());
+    const auto path = directory.filePath(QStringLiteral("annotated.png"));
+
+    session.save();
+    REQUIRE(chooser.accept);
+    chooser.accept(path);
+    REQUIRE(session.state() == lc::snip::SnipSessionState::ExportingAnnotated);
+    QElapsedTimer timer;
+    timer.start();
+    while (session.active() && timer.elapsed() < 3000) {
+        app.processEvents();
+        QThread::msleep(1);
+    }
+
+    CHECK_FALSE(session.active());
+    CHECK(session.state() == lc::snip::SnipSessionState::Idle);
+    CHECK(session.document() == nullptr);
+    CHECK(session.overlayCount() == 0);
+    CHECK(QImage(path).convertToFormat(QImage::Format_RGB32) == expected);
+}
+
+TEST_CASE("cancelling an annotated export rejects its stale clipboard completion") {
+    int argc = 1;
+    char name[] = "annotation-export-stale-completion-test";
+    char* argv[] = {name, nullptr};
+    QApplication app(argc, argv);
+    SessionService service;
+    SessionRecovery recovery;
+    lc::snip::SnapshotBatch batch(service, recovery, {});
+    ControlledPreparation preparation;
+    lc::snip::SnipSession session(batch, preparation.function());
+    lc::platform::windows::MonitorDescriptor monitor{};
+    monitor.desktopRect = {0, 0, 20, 15};
+    monitor.catalogGeneration = 1;
+    session.begin({monitor});
+    batch.ready({{{0, 0, 20, 15}, annotationTestImage()}});
+    selectRect(session);
+    session.beginAnnotation(lc::annotation::AnnotationTool::Rectangle);
+    preparation.complete(annotationTestImage());
+    app.processEvents();
+    REQUIRE(session.document() != nullptr);
+    REQUIRE(session.document()->addObject(
+                lc::annotation::RectangleAnnotation{{2, 2, 8, 6}, {Qt::blue, 3}})
+                .has_value());
+    QImage sentinel(3, 2, QImage::Format_RGB32);
+    sentinel.fill(Qt::green);
+    app.clipboard()->setImage(sentinel);
+
+    session.copy();
+    REQUIRE(session.state() == lc::snip::SnipSessionState::ExportingAnnotated);
+    session.cancel();
+    QElapsedTimer timer;
+    timer.start();
+    while (timer.elapsed() < 100) {
+        app.processEvents();
+        QThread::msleep(1);
+    }
+
+    CHECK_FALSE(session.active());
+    CHECK(session.state() == lc::snip::SnipSessionState::Idle);
+    CHECK(app.clipboard()->image().convertToFormat(QImage::Format_RGB32) == sentinel);
+}
+
+TEST_CASE("destroying a session during export waits safely and drops queued completion") {
+    int argc = 1;
+    char name[] = "annotation-export-destruction-test";
+    char* argv[] = {name, nullptr};
+    QApplication app(argc, argv);
+    SessionService service;
+    SessionRecovery recovery;
+    lc::snip::SnapshotBatch batch(service, recovery, {});
+    QImage sentinel(3, 2, QImage::Format_RGB32);
+    sentinel.fill(Qt::green);
+    app.clipboard()->setImage(sentinel);
+    {
+        auto session = std::make_unique<lc::snip::SnipSession>(batch);
+        lc::platform::windows::MonitorDescriptor monitor{};
+        monitor.desktopRect = {0, 0, 2048, 2048};
+        monitor.catalogGeneration = 1;
+        session->begin({monitor});
+        QImage image(2048, 2048, QImage::Format_RGB32);
+        image.fill(Qt::red);
+        batch.ready({{{0, 0, 2048, 2048}, image}});
+        selectRect(*session, {0, 0}, {2048, 2048});
+        session->copy();
+        REQUIRE(session->state() == lc::snip::SnipSessionState::ExportingFromSelection);
+        session.reset();
+    }
+    app.processEvents();
+
+    CHECK(app.clipboard()->image().convertToFormat(QImage::Format_RGB32) == sentinel);
+    CHECK(activeOverlays().empty());
+}
+
+TEST_CASE("display invalidation during annotation preparation cancels stale completion") {
+    int argc = 1;
+    char name[] = "annotation-display-invalidated-preparation-test";
+    char* argv[] = {name, nullptr};
+    QApplication app(argc, argv);
+    SessionService service;
+    SessionRecovery recovery;
+    lc::snip::SnapshotBatch batch(service, recovery, {});
+    ControlledPreparation preparation;
+    lc::snip::SnipSession session(batch, preparation.function());
+    lc::platform::windows::MonitorDescriptor monitor{};
+    monitor.desktopRect = {0, 0, 20, 15};
+    monitor.catalogGeneration = 1;
+    session.begin({monitor});
+    batch.ready({{{0, 0, 20, 15}, annotationTestImage()}});
+    selectRect(session);
+    session.beginAnnotation(lc::annotation::AnnotationTool::Rectangle);
+    REQUIRE(session.state() == lc::snip::SnipSessionState::PreparingAnnotation);
+    const auto overlays = activeOverlays();
+    REQUIRE(overlays.size() == 1);
+
+    REQUIRE(QMetaObject::invokeMethod(overlays.front(), "displayInvalidated", Qt::DirectConnection));
+    app.processEvents();
+    CHECK(session.state() == lc::snip::SnipSessionState::Idle);
+    CHECK_FALSE(session.active());
+    preparation.complete(annotationTestImage());
+    app.processEvents();
+    CHECK(session.document() == nullptr);
+}
+
+TEST_CASE("display invalidation closes text editing without committing its draft") {
+    int argc = 1;
+    char name[] = "annotation-display-invalidated-text-test";
+    char* argv[] = {name, nullptr};
+    QApplication app(argc, argv);
+    SessionService service;
+    SessionRecovery recovery;
+    lc::snip::SnapshotBatch batch(service, recovery, {});
+    ControlledPreparation preparation;
+    lc::snip::SnipSession session(batch, preparation.function());
+    lc::platform::windows::MonitorDescriptor monitor{};
+    monitor.desktopRect = {0, 0, 20, 15};
+    monitor.catalogGeneration = 1;
+    session.begin({monitor});
+    batch.ready({{{0, 0, 20, 15}, annotationTestImage()}});
+    selectRect(session);
+    session.beginAnnotation(lc::annotation::AnnotationTool::Text);
+    preparation.complete(annotationTestImage());
+    app.processEvents();
+    auto overlays = activeOverlays();
+    REQUIRE(overlays.size() == 1);
+    overlays.front()->createTextEditor({2, 2});
+    REQUIRE(overlays.front()->findChild<QPlainTextEdit*>("annotationTextEditor") != nullptr);
+
+    REQUIRE(QMetaObject::invokeMethod(overlays.front(), "displayInvalidated", Qt::DirectConnection));
+    app.processEvents();
+    CHECK(session.state() == lc::snip::SnipSessionState::Idle);
+    CHECK(session.document() == nullptr);
+    CHECK_FALSE(session.active());
+}
+
+TEST_CASE("display invalidation during annotated export rejects the queued result") {
+    int argc = 1;
+    char name[] = "annotation-display-invalidated-export-test";
+    char* argv[] = {name, nullptr};
+    QApplication app(argc, argv);
+    SessionService service;
+    SessionRecovery recovery;
+    lc::snip::SnapshotBatch batch(service, recovery, {});
+    ControlledPreparation preparation;
+    lc::snip::SnipSession session(batch, preparation.function());
+    constexpr int side = 1024;
+    lc::platform::windows::MonitorDescriptor monitor{};
+    monitor.desktopRect = {0, 0, side, side};
+    monitor.catalogGeneration = 1;
+    session.begin({monitor});
+    QImage image(side, side, QImage::Format_RGB32);
+    image.fill(Qt::red);
+    batch.ready({{{0, 0, side, side}, image}});
+    selectRect(session, {0, 0}, {side, side});
+    session.beginAnnotation(lc::annotation::AnnotationTool::Mosaic);
+    preparation.complete(image);
+    app.processEvents();
+    REQUIRE(session.document() != nullptr);
+    REQUIRE(session.document()->addObject(
+                lc::annotation::MosaicAnnotation{{0, 0, side, side}, 4})
+                .has_value());
+    const auto overlays = activeOverlays();
+    REQUIRE(overlays.size() == 1);
+    QImage sentinel(3, 2, QImage::Format_RGB32);
+    sentinel.fill(Qt::green);
+    app.clipboard()->setImage(sentinel);
+
+    session.copy();
+    REQUIRE(session.state() == lc::snip::SnipSessionState::ExportingAnnotated);
+    REQUIRE(QMetaObject::invokeMethod(overlays.front(), "displayInvalidated", Qt::DirectConnection));
+    QCoreApplication::sendPostedEvents(&session, QEvent::MetaCall);
+    CHECK(session.state() == lc::snip::SnipSessionState::Idle);
+    CHECK_FALSE(session.active());
+    QElapsedTimer timer;
+    timer.start();
+    while (timer.elapsed() < 100) {
+        app.processEvents();
+        QThread::msleep(1);
+    }
+    CHECK(app.clipboard()->image().convertToFormat(QImage::Format_RGB32) == sentinel);
+}
+
+TEST_CASE("a rapid second begin request is ignored while a snip session is active") {
+    int argc = 1;
+    char name[] = "snip-rapid-begin-test";
+    char* argv[] = {name, nullptr};
+    QApplication app(argc, argv);
+    SessionService service;
+    SessionRecovery recovery;
+    lc::snip::SnapshotBatch batch(service, recovery, {});
+    lc::snip::SnipSession session(batch);
+    lc::platform::windows::MonitorDescriptor first{}, second{};
+    first.desktopRect = {0, 0, 20, 15};
+    first.catalogGeneration = 1;
+    second.desktopRect = {20, 0, 40, 15};
+    second.catalogGeneration = 2;
+
+    session.begin({first});
+    session.begin({second});
+    CHECK(session.state() == lc::snip::SnipSessionState::PreparingCapture);
+    batch.ready({{{0, 0, 20, 15}, annotationTestImage()}});
+    CHECK(session.state() == lc::snip::SnipSessionState::Selecting);
+    CHECK(session.overlayCount() == 1);
     session.cancel();
 }

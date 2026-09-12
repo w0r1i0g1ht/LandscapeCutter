@@ -124,4 +124,10 @@ Preflight result: no unresolved contradictions between tasks, the plan's global 
 - Base: `1318a76b`
 - Brief: `.superpowers/sdd/2026-09-09-milestone-3-annotation-system/task-7-brief.md`
 - Required first fix: make overlay/session teardown deterministic so controller tests do not leave parentless widgets queued for deletion as a local `QApplication` exits.
-- Status: started.
+- Lifecycle repair: `SnipSession` drains deferred overlay deletes in its destructor after workers end; the cross-monitor live-draft controller case passed five consecutive direct runs and CTest isolation.
+- Export: direct and annotated paths now choose `composeSelection` / `composeAnnotations` from a GUI-thread value snapshot; annotation save cancellation restores Annotating and its history.
+- Focused lifecycle/export tests passed, including cross-monitor cleanup, direct/annotated failure recovery, both save-dialog cancellation states, stale completion rejection, display invalidation during preparation/text/export, successful annotated copy/save cleanup, worker-safe destruction, rapid duplicate begin suppression, and PNG/JPEG fidelity.
+- Full validation: MSVC Debug Ninja all-target build passed; default CTest excluding desktop integration passed 211/211; desktop integration passed 4/4 with desktop-session permission. The current desktop is one 1920 × 1080, 96-DPI SDR monitor.
+- Process audit: final validation created no residual product, helper, or CTest processes. Two earlier controller diagnostics (`35352`, `41260`) remain access-protected and could not be safely path-verified; they were not reused or force-terminated.
+- Documentation: README and `docs/superpowers/progress/2026-09-09-milestone-3-progress.md` updated. Hardware/manual acceptance remains pending.
+- Status: implementation complete; independent code review and manual acceptance remain.

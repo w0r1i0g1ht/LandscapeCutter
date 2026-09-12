@@ -104,7 +104,9 @@ QString saveImage(const QImage& image, const QString& path, const QByteArray& fo
     if (!file.open(QIODevice::WriteOnly))
         return file.errorString();
     QImageWriter writer(&file, format);
-    writer.setQuality(95);
+    if (format.compare("jpeg", Qt::CaseInsensitive) == 0 ||
+        format.compare("jpg", Qt::CaseInsensitive) == 0)
+        writer.setQuality(90);
     if (!writer.write(image)) {
         file.cancelWriting();
         return writer.errorString();

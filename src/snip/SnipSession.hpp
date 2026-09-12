@@ -70,11 +70,13 @@ class SnipSession final : public QObject {
     void savePathChosen(QString path);
     void savePathCancelled();
     void exportImage(QString path = {}, QByteArray format = {});
+    void destroyOverlaysDeferred();
     void setBusy(bool);
     SnapshotBatch& batch_;
     SelectionModel selection_;
     std::vector<FrozenMonitor> images_;
     std::vector<std::unique_ptr<SnipOverlay>> overlays_;
+    std::vector<QPointer<QObject>> deferredOverlays_;
     QPointer<QFileDialog> dialog_;
     QThreadPool workers_;
     PrepareAnnotation preparation_;
@@ -88,5 +90,6 @@ class SnipSession final : public QObject {
     QRect lockedSelection_;
     bool active_ = false, busy_ = false, preparing_ = false;
     SnipSessionState state_{SnipSessionState::Idle};
+    SnipSessionState saveSourceState_{SnipSessionState::Selecting};
 };
 } // namespace lc::snip

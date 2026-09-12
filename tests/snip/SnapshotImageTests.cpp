@@ -3,6 +3,7 @@
 #include <QFile>
 #include <QTemporaryDir>
 #include <catch2/catch_test_macros.hpp>
+#include <cmath>
 #include <cstring>
 
 using namespace lc::snip;
@@ -60,15 +61,27 @@ TEST_CASE("snip atomic export roundtrips and failed encoding preserves destinati
     REQUIRE(dir.isValid());
     const auto path = dir.filePath("capture.png");
     QImage red(16, 16, QImage::Format_RGB32);
-    red.fill(Qt::red);
+    for (int y = 0; y < red.height(); ++y)
+        for (int x = 0; x < red.width(); ++x)
+            red.setPixelColor(x, y, {x * 15, y * 15, (x + y) * 7});
     REQUIRE(saveImage(red, path, "png").isEmpty());
-    CHECK(QImage(path).pixelColor(0, 0) == QColor(Qt::red));
+    CHECK(QImage(path).convertToFormat(QImage::Format_RGB32) == red);
     REQUIRE_FALSE(saveImage(red, path, "invalid-format").isEmpty());
-    CHECK(QImage(path).pixelColor(0, 0) == QColor(Qt::red));
+    CHECK(QImage(path).convertToFormat(QImage::Format_RGB32) == red);
     const auto jpeg = dir.filePath("capture.jpg");
     REQUIRE(saveImage(red, jpeg, "jpeg").isEmpty());
     REQUIRE(QImage(jpeg).size() == red.size());
-    CHECK(QImage(jpeg).pixelColor(4, 4).red() > 250);
+    const auto decoded = QImage(jpeg).convertToFormat(QImage::Format_RGB32);
+    double absoluteError{};
+    for (int y = 0; y < red.height(); ++y)
+        for (int x = 0; x < red.width(); ++x) {
+            const auto expected = red.pixelColor(x, y);
+            const auto actual = decoded.pixelColor(x, y);
+            absoluteError += std::abs(expected.red() - actual.red()) +
+                             std::abs(expected.green() - actual.green()) +
+                             std::abs(expected.blue() - actual.blue());
+        }
+    CHECK(absoluteError / (red.width() * red.height() * 3) <= 12.0);
     CHECK_FALSE(saveImage(red, dir.filePath("missing/file.png"), "png").isEmpty());
 }
 

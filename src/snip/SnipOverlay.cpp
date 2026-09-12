@@ -48,6 +48,7 @@ SnipOverlay::SnipOverlay(FrozenMonitor monitor, SelectionModel& selection, QWidg
     : QWidget(parent, Qt::Tool | Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint),
       monitor_(std::move(monitor)), selection_(selection) {
     setAttribute(Qt::WA_DeleteOnClose, false);
+    setAttribute(Qt::WA_QuitOnClose, false);
     setFocusPolicy(Qt::StrongFocus);
     setMouseTracking(true);
 #ifdef Q_OS_WIN
@@ -327,6 +328,13 @@ void SnipOverlay::paintEvent(QPaintEvent* event) {
 void SnipOverlay::showEvent(QShowEvent* event) {
     QWidget::showEvent(event);
     placementComplete_ = false;
+#ifdef Q_OS_WIN
+    if (QGuiApplication::platformName() != QStringLiteral("windows")) {
+        placementComplete_ = true;
+        refresh();
+        return;
+    }
+#endif
     static_cast<void>(placeOnPhysicalMonitor());
     QTimer::singleShot(0, this, [this] {
         if (!isVisible())

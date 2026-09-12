@@ -1,8 +1,10 @@
 #include "snip/SnipSession.hpp"
+#include "annotation/AnnotationRenderer.hpp"
 #include "app/AppController.hpp"
 #include "snip/SnipOverlay.hpp"
 #include <QApplication>
 #include <QClipboard>
+#include <QCoreApplication>
 #include <QDateTime>
 #include <QFileDialog>
 #include <QFileInfo>
@@ -34,6 +36,11 @@ SnipSession::SnipSession(SnapshotBatch& batch, PrepareAnnotation preparation,
 SnipSession::~SnipSession() {
     cancel();
     workers_.waitForDone();
+    for (const auto& overlay : deferredOverlays_) {
+        if (overlay)
+            QCoreApplication::sendPostedEvents(overlay, QEvent::DeferredDelete);
+    }
+    deferredOverlays_.clear();
 }
 void SnipSession::begin(std::vector<platform::windows::MonitorDescriptor> monitors) {
     if (active_)
@@ -60,17 +67,24 @@ void SnipSession::cancel() {
         dialog_->deleteLater();
         dialog_ = nullptr;
     }
-    // Defer deletion so a button/key event can return to its sender safely.
-    for (auto& overlay : overlays_) {
-        overlay->clearAnnotationContext();
-        overlay->hide();
-        overlay.release()->deleteLater();
-    }
-    overlays_.clear();
+    destroyOverlaysDeferred();
     images_.clear();
     selection_.clear();
     interaction_.reset();
     document_.reset();
+}
+
+void SnipSession::destroyOverlaysDeferred() {
+    std::erase_if(deferredOverlays_, [](const QPointer<QObject>& overlay) { return overlay.isNull(); });
+    // Defer deletion so a button/key event can return to its sender safely.
+    for (auto& overlay : overlays_) {
+        overlay->clearAnnotationContext();
+        overlay->hide();
+        auto* deferred = overlay.release();
+        deferredOverlays_.emplace_back(deferred);
+        deferred->deleteLater();
+    }
+    overlays_.clear();
 }
 void SnipSession::open(std::vector<FrozenMonitor> images) {
     if (!active_ || !preparing_)
@@ -170,14 +184,17 @@ void SnipSession::setBusy(bool busy) {
         overlay->setBusy(busy);
 }
 void SnipSession::copy() {
-    if (active_ && state_ == SnipSessionState::Selecting && !busy_ && !preparing_ &&
-        !selection_.rect().isEmpty())
+    if (active_ && !busy_ && !preparing_ &&
+        ((state_ == SnipSessionState::Selecting && !selection_.rect().isEmpty()) ||
+         (state_ == SnipSessionState::Annotating && document_)))
         exportImage();
 }
 void SnipSession::save() {
-    if (!active_ || state_ != SnipSessionState::Selecting || busy_ || preparing_ ||
-        selection_.rect().isEmpty())
+    if (!active_ || busy_ || preparing_ ||
+        !((state_ == SnipSessionState::Selecting && !selection_.rect().isEmpty()) ||
+          (state_ == SnipSessionState::Annotating && document_)))
         return;
+    saveSourceState_ = state_;
     setBusy(true);
     state_ = SnipSessionState::ChoosingSavePath;
     if (savePathChooser_) {
@@ -241,7 +258,7 @@ void SnipSession::savePathChosen(QString path) {
     else if (suffix == "jpg" || suffix == "jpeg")
         format = "jpeg";
     else {
-        state_ = SnipSessionState::Selecting;
+        state_ = saveSourceState_;
         setBusy(false);
         emit errorOccurred(QStringLiteral("请使用 .png、.jpg 或 .jpeg 文件扩展名。"));
         return;
@@ -252,23 +269,34 @@ void SnipSession::savePathChosen(QString path) {
 void SnipSession::savePathCancelled() {
     dialog_ = nullptr;
     if (active_ && state_ == SnipSessionState::ChoosingSavePath) {
-        state_ = SnipSessionState::Selecting;
+        state_ = saveSourceState_;
         setBusy(false);
     }
 }
 void SnipSession::exportImage(QString path, QByteArray format) {
+    const bool annotated = state_ == SnipSessionState::Annotating ||
+                           (state_ == SnipSessionState::ChoosingSavePath &&
+                            saveSourceState_ == SnipSessionState::Annotating);
+    if (!active_ || (annotated && !document_))
+        return;
+    const auto sourceState = annotated ? SnipSessionState::Annotating : SnipSessionState::Selecting;
+    annotation::AnnotationSnapshot annotationSnapshot;
+    if (annotated)
+        annotationSnapshot = document_->snapshot();
     setBusy(true);
-    state_ = SnipSessionState::ExportingFromSelection;
+    state_ = annotated ? SnipSessionState::ExportingAnnotated : SnipSessionState::ExportingFromSelection;
     const auto requestId = id_;
     const auto rect = selection_.rect();
     const auto images = images_;
     const auto cancellation = cancellation_;
-    workers_.start([this, requestId, rect, images, path = std::move(path),
-                    format = std::move(format), cancellation] {
+    const QPointer<SnipSession> session(this);
+    workers_.start([session, requestId, rect, images, annotationSnapshot = std::move(annotationSnapshot),
+                    annotated, sourceState, path = std::move(path), format = std::move(format), cancellation] {
         QImage result;
         QString error;
         try {
-            result = composeSelection(images, rect);
+            result = annotated ? annotation::composeAnnotations(annotationSnapshot)
+                               : composeSelection(images, rect);
             if (result.isNull())
                 error = QStringLiteral("选区没有有效画面，或图像过大。");
             else if (!path.isEmpty())
@@ -277,19 +305,19 @@ void SnipSession::exportImage(QString path, QByteArray format) {
             error = QStringLiteral("图像处理失败，请缩小选区后重试。");
         }
         QMetaObject::invokeMethod(
-            this,
-            [this, requestId, result = std::move(result), error, path] {
-                if (!active_ || requestId != id_)
+            session,
+            [session, requestId, sourceState, result = std::move(result), error, path] {
+                if (!session || !session->active_ || requestId != session->id_)
                     return;
                 if (!error.isEmpty()) {
-                    state_ = SnipSessionState::Selecting;
-                    setBusy(false);
-                    emit errorOccurred(error);
+                    session->state_ = sourceState;
+                    session->setBusy(false);
+                    emit session->errorOccurred(error);
                     return;
                 }
                 if (path.isEmpty())
                     QApplication::clipboard()->setImage(result);
-                cancel();
+                session->cancel();
             },
             Qt::QueuedConnection);
     });
