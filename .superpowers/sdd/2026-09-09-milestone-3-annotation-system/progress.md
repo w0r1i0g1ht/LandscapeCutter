@@ -113,13 +113,15 @@ Preflight result: no unresolved contradictions between tasks, the plan's global 
 - Implementation: mosaic rendering, interaction, toolbar block-size control, and focused exact-pixel/preview tests are complete.
 - GREEN: `ctest --test-dir out\annotation-ninja-task6 -R "annotation mosaic" --output-on-failure` passed 9/9; the complete annotation executable passed 41 cases / 4258 assertions through the controlled offscreen wrapper.
 - Review fix: manual `INT_MAX` / `INT_MAX - 1` mosaic blocks now use 64-bit cell origins/endpoints and guarded increments, retaining all positive model values. Focused mosaic passed 10/10 and complete annotation passed 42 cases / 4260 assertions.
+- Implementation commits: `e62c113 feat: add mosaic annotations`; `1318a76 fix: harden mosaic block iteration`.
+- Independent review: the initial review found one Important signed-overflow risk for extreme positive block sizes. The fix re-review closed it with no new Critical or Important findings.
 - Controller validation: the new discovered mosaic toolbar case passes in isolation. The controller executable's existing deferred-delete lifetime UB is exposed by Task 6's changed binary layout: `annotating across monitors keeps one toolbar host while a draft is live` failed 0/3 on Task 6 (crash/timeout) but passed 3/3 on the Task 5 build. The test calls `session.cancel()` while parentless overlays remain queued for `deleteLater()` as `QApplication` exits. Task 7 must fix session/test cleanup before milestone-wide controller acceptance.
 - Process audit: prior protected PIDs `14104`, `20732`, `24440`, and `27444` had already disappeared. Task-6-launched test PIDs were terminated during wrapper diagnosis; final audit found no `landscapecutter_*` or `ctest*` processes.
-- Status: complete; controller-wide acceptance is deferred to Task 7 cleanup. See `task-6-report.md`.
+- Status: complete and independently reviewed Clean; controller-wide acceptance is deferred to Task 7 cleanup. See `task-6-report.md`.
 
-## Task 3: Snip Session Annotation State and Cancellable Base Preparation
+## Task 7: Unified Export, Regression, Documentation, and Acceptance
 
-- Base: `4b4f3a057dfd2ae4526e701832093bf4e94120b4`
-- Implementer: `/root/m3_task3_impl` (worker / gpt-5.6-terra medium)
-- Brief: `.superpowers/sdd/2026-09-09-milestone-3-annotation-system/task-3-brief.md`
-- Status: implementation in progress
+- Base: `1318a76b`
+- Brief: `.superpowers/sdd/2026-09-09-milestone-3-annotation-system/task-7-brief.md`
+- Required first fix: make overlay/session teardown deterministic so controller tests do not leave parentless widgets queued for deletion as a local `QApplication` exits.
+- Status: started.
