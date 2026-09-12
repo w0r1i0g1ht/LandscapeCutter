@@ -8,6 +8,8 @@ Save-dialog cancellation and invalid extensions restore the exact source state. 
 
 An independent review found that cancellation could arrive after the worker's final flag check but before `QSaveFile::commit()`. Each session now owns one export-finalization mutex. `cancel()` holds it while publishing cancellation, and `saveImage()` holds it across the final flag check and atomic commit. This gives cancellation and commit one linear order: cancellation that acquires the boundary first prevents replacement, while an already-finalizing commit completes before cancellation becomes visible. The regression test blocks the save worker at this boundary, publishes cancellation, and verifies that no destination is committed.
 
+The fix is recorded in `b036274 fix: serialize export cancellation and commit`. Independent re-review found no Critical or Important findings: the mutex/token pair is captured per request, request identity still rejects stale completion, destructor cancellation converges with the worker, and the optional low-level mutex parameter has no production call path that omits it.
+
 ## Lifecycle repair
 
 Task 6 exposed a latent teardown race. Parentless overlays were released to `deleteLater()`, while local test `QApplication` instances could end before deferred deletes ran. The session now tracks deferred overlays and, during destruction, waits for export/preparation workers before delivering each remaining deferred-delete event. Event-originated cancellation remains deferred so the sender can return safely.

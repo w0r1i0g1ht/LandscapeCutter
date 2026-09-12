@@ -131,4 +131,7 @@ Preflight result: no unresolved contradictions between tasks, the plan's global 
 - Full validation: a clean MSVC Debug Ninja all-target build passed; default CTest excluding desktop integration passed 212/212; desktop integration passed 4/4 with desktop-session permission. The current desktop is one 1920 × 1080, 96-DPI SDR monitor.
 - Process audit: final validation created no residual product, helper, or CTest processes. Two earlier controller diagnostics (`35352`, `41260`) remain access-protected and could not be safely path-verified; they were not reused or force-terminated.
 - Documentation: README and `docs/superpowers/progress/2026-09-09-milestone-3-progress.md` updated. Hardware/manual acceptance remains pending.
-- Review round 1: Critical 0, Important 1. The reviewer found a cancellation race between the final cancellation check and `QSaveFile::commit()`; the shared finalization boundary above addresses it. Re-review and manual acceptance remain.
+- Review round 1: Critical 0, Important 1. The reviewer found a cancellation race between the final cancellation check and `QSaveFile::commit()`.
+- Review fix commit: `b036274 fix: serialize export cancellation and commit`.
+- Re-review round 1: the shared finalization boundary closes the original race without a deadlock or cross-session path; no new Critical or Important findings.
+- Status: implementation complete and independently reviewed Clean; milestone-wide review and manual acceptance remain.
