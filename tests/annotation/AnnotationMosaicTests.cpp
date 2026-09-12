@@ -6,6 +6,8 @@
 
 #include <QPainter>
 
+#include <limits>
+
 namespace {
 using namespace lc::annotation;
 
@@ -92,6 +94,19 @@ TEST_CASE("annotation mosaic later creations cover earlier mosaics using immutab
 TEST_CASE("annotation mosaic safely ignores an invalid block size in a manual snapshot") {
     AnnotationSnapshot snapshot{coordinateImage({9, 7}), {{1, MosaicAnnotation{{1, 1, 4, 4}, 0}}}};
     CHECK(composeAnnotations(snapshot) == snapshot.base);
+}
+
+TEST_CASE("annotation mosaic safely renders manual near-limit positive block sizes") {
+    const QImage base = coordinateImage({9, 7});
+    const AnnotationSnapshot expected{base, {{1, MosaicAnnotation{{1, 1, 4, 4}, 64}}}};
+    const AnnotationSnapshot maximum{
+        base, {{1, MosaicAnnotation{{1, 1, 4, 4}, std::numeric_limits<int>::max()}}}};
+    const AnnotationSnapshot nearMaximum{
+        base, {{1, MosaicAnnotation{{1, 1, 4, 4}, std::numeric_limits<int>::max() - 1}}}};
+
+    const QImage expectedOutput = composeAnnotations(expected);
+    CHECK(composeAnnotations(maximum) == expectedOutput);
+    CHECK(composeAnnotations(nearMaximum) == expectedOutput);
 }
 
 TEST_CASE("annotation mosaic draws below vectors and hit testing honors visual layers") {

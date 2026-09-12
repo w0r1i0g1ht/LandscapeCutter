@@ -18,7 +18,13 @@ ctest --test-dir out\annotation-ninja-task6 -R "annotation mosaic" --output-on-f
 
 passed 9/9 tests. Coverage includes exact RGB means and half-up rounding, clipped and partial cells, document-origin alignment, immutable-base multi-mosaic composition, visual render/hit layers, invalid manual values, direct and two-overlay split previews, and toolbar/block-size behavior.
 
-The complete annotation executable was also run with `QT_QPA_PLATFORM=offscreen`, `SetErrorMode(0x0003)`, redirected standard streams, and a bounded `Start-Process` wrapper. It exited zero with `All tests passed (4258 assertions in 41 test cases)` and no stderr.
+### Review fix: near-limit block sizes
+
+An Important review found that the original `int` grid coordinates could overflow on a later `+= blockSize` for a hand-built, very large positive block size. The renderer now keeps cell origins, grid endpoints, and increments in `int64_t`, with an explicit pre-increment bound guard. It does not clamp or reject legal positive model values.
+
+`annotation mosaic safely renders manual near-limit positive block sizes` creates `INT_MAX` and `INT_MAX - 1` manual payloads and verifies deterministic output equal to a single document-origin cell. This is regression coverage for the representable input boundary. A small allocated `QImage` cannot make the pre-fix `int` increment wrap, because its clipped coordinates are necessarily far below `INT_MAX`; the review finding was source-level arithmetic UB rather than an executable pixel failure on a feasible image allocation. After the fix, the focused suite passed 10/10 and complete annotation validation passed 42 cases / 4260 assertions.
+
+The complete annotation executable was also run with `QT_QPA_PLATFORM=offscreen`, `SetErrorMode(0x0003)`, redirected standard streams, and a bounded `Start-Process` wrapper. It exited zero with `All tests passed (4260 assertions in 42 test cases)` and no stderr.
 
 ## Controller-suite observation
 
