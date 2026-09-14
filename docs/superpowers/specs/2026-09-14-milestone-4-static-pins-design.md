@@ -1,7 +1,7 @@
 # 里程碑 4：可编辑静态贴图详细设计
 
 - 日期：2026-09-14
-- 状态：待用户审阅
+- 状态：已批准，实施计划已制定
 - 前置里程碑：[里程碑 3：标注系统](2026-09-09-milestone-3-annotation-system-design.md)
 - 上位设计：[LandscapeCutter C++ 重构设计](2026-09-02-cpp-rewrite-design.md)
 
@@ -207,8 +207,11 @@ class PinManager final : public QObject {
 };
 ```
 
-成功结果设置 `id`，并保持 `rejectedDocument` 和 `error` 为空。失败结果不设置 `id`，把未消费的
-文档放入 `rejectedDocument` 并填写 `error`；调用者据此恢复原会话。失败路径不得复制或丢弃文档。
+管理器先创建不带文档的窗口，再调用
+`PinWindow::attachDocument(std::unique_ptr<AnnotationDocument>&, QPoint)`。该函数仅在所有验证和窗口
+初始化完成后移动引用中的指针；成功时引用变空，失败时引用保持原指针并返回错误。成功结果设置
+`id`，并保持 `rejectedDocument` 和 `error` 为空。失败结果不设置 `id`，把未消费的文档放入
+`rejectedDocument` 并填写 `error`；调用者据此恢复原会话。失败路径不得复制或丢弃文档。
 
 ### 5.5 `snip/SnipSession` 集成
 
