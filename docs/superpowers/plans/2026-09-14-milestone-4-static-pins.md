@@ -40,7 +40,7 @@
 - Consumes: `annotation::AnnotationDocument`, `annotation::AnnotationInteraction`, and existing toolbar object names such as `rectangleToolButton`, `lineWidthSpinBox`, `copyButton`, and `saveButton`.
 - Produces: `AnnotationToolbarMode`, `AnnotationToolbar`, host action signals including `pinRequested()` and `doneRequested()`, and an unchanged SnipOverlay user flow.
 
-- [ ] **Step 0: Prepare and verify the isolated worktree with safe targets**
+- [x] **Step 0: Prepare and verify the isolated worktree with safe targets**
 
 The worktree intentionally does not contain ignored dependencies or build output. Reuse the already verified main-checkout toolchain without downloading anything:
 
@@ -57,7 +57,7 @@ $env:QT_QPA_PLATFORM = 'offscreen'
 
 Expected: configuration and both named targets succeed; both offscreen executables report zero failed test cases. Stop if either safe baseline fails. Do not run CTest presets or any graphics/capture target.
 
-- [ ] **Step 1: Add focused failing toolbar tests**
+- [x] **Step 1: Add focused failing toolbar tests**
 
 Create `AnnotationToolbarTests.cpp` with an offscreen `QApplication` fixture. Cover both host modes and keep existing object names stable:
 
@@ -90,7 +90,7 @@ TEST_CASE("annotation toolbar pin mode replaces cancel and pin with done") {
 
 Also cover selected-object style reflection, line-width/color preservation, mosaic block-size visibility, tool checked state, undo/redo/delete enabled state, and `setBusy(true)` disabling mutating and output actions.
 
-- [ ] **Step 2: Register the test and verify RED without building unrelated targets**
+- [x] **Step 2: Register the test and verify RED without building unrelated targets**
 
 Add `AnnotationToolbarTests.cpp` to `landscapecutter_annotation_tests`, then run:
 
@@ -100,7 +100,7 @@ cmake --build --preset windows-msvc-debug --target landscapecutter_annotation_te
 
 Expected: compilation fails because `AnnotationToolbar.hpp` and its interfaces do not exist. Do not run CTest yet.
 
-- [ ] **Step 3: Implement the shared toolbar**
+- [x] **Step 3: Implement the shared toolbar**
 
 Create the following public API:
 
@@ -137,7 +137,7 @@ Move control construction, selected-object style inspection, value synchronizati
 
 Snip mode shows Copy/Save/Pin/Cancel. Pin mode shows Copy/Save/Done. Both modes show the same tool buttons and property controls while an annotation context is present.
 
-- [ ] **Step 4: Replace SnipOverlay's inline controls**
+- [x] **Step 4: Replace SnipOverlay's inline controls**
 
 Store one `AnnotationToolbar* toolbar_` instead of individual toolbar controls. Connect its signals to the existing SnipOverlay signals. Add:
 
@@ -151,7 +151,7 @@ private:
 
 `requestPinIfSelected()` follows Copy/Save behavior: commit nonempty text first, close empty text without adding an object, then emit exactly once if content exists and the overlay is not busy. Keep toolbar-host placement, cross-screen sharing and all existing button object names unchanged.
 
-- [ ] **Step 5: Run only safe toolbar and overlay tests**
+- [x] **Step 5: Run only safe toolbar and overlay tests**
 
 ```powershell
 cmake --build --preset windows-msvc-debug --target landscapecutter_annotation_tests landscapecutter_app_controller_tests
@@ -160,7 +160,7 @@ ctest --test-dir out/build/windows-msvc-debug -C Debug --output-on-failure -R "a
 
 Expected: every selected test passes. Confirm the test list contains no graphics, capture, or desktop-integration case before accepting the result.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```powershell
 git add src/annotation/AnnotationToolbar.* src/snip/SnipOverlay.* tests/annotation/AnnotationToolbarTests.cpp tests/snip/SnipOverlayTests.cpp src/CMakeLists.txt tests/CMakeLists.txt

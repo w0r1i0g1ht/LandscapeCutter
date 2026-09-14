@@ -864,4 +864,36 @@ TEST_CASE("a real select double-click clears its draft before opening text editi
     CHECK_FALSE(interaction.hasDraft());
     CHECK(std::get<TextAnnotation>(document.objects().front().payload).text == QStringLiteral("new"));
 }
+
+TEST_CASE("annotation toolbar pin commits pending text before requesting a pin") {
+    ApplicationFixture fixture;
+    SelectionModel selection;
+    selection.setBounds({0, 0, 80, 40});
+    auto document = annotationDocument({80, 40});
+    AnnotationInteraction interaction(document);
+    interaction.setTool(AnnotationTool::Text);
+    QImage image({80, 40}, QImage::Format_RGB32);
+    image.fill(Qt::white);
+    SnipOverlay overlay{{{0, 0, 80, 40}, image}, selection};
+    overlay.setToolbarHost(true);
+    overlay.setAnnotationContext(&document, &interaction, {0, 0, 80, 40});
+    overlay.createTextEditor({4, 4});
+    auto* editor = overlay.findChild<QPlainTextEdit*>("annotationTextEditor");
+    auto* pin = overlay.findChild<QToolButton*>("pinButton");
+    REQUIRE(editor != nullptr);
+    REQUIRE(pin != nullptr);
+    editor->setPlainText(QStringLiteral("pin text"));
+    int requests{};
+    QObject::connect(&overlay, &SnipOverlay::pinRequested, [&] {
+        ++requests;
+        REQUIRE(document.objects().size() == 1);
+        CHECK(std::get<TextAnnotation>(document.objects().front().payload).text ==
+              QStringLiteral("pin text"));
+    });
+
+    pin->click();
+
+    CHECK(requests == 1);
+    CHECK(overlay.findChild<QPlainTextEdit*>("annotationTextEditor") == nullptr);
+}
 } // namespace

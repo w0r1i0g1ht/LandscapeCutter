@@ -20,6 +20,7 @@ add_executable(landscapecutter_annotation_tests
     annotation/AnnotationInteractionTests.cpp
     annotation/AnnotationRendererTests.cpp
     annotation/AnnotationPreparationTests.cpp
+    annotation/AnnotationToolbarTests.cpp
 )
 
 target_link_libraries(landscapecutter_annotation_tests PRIVATE
