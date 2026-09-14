@@ -7,7 +7,7 @@ LandscapeCutter 正在从 Python 原型重构为 C++20 与 Qt 6。项目将先�
 
 ## 当前状态
 
-**里程碑 0、里程碑 1 和里程碑 2 已完成。** 当前仓库已经切换到 C++/Qt 工程，
+**里程碑 0、里程碑 1、里程碑 2 和里程碑 3 已完成。** 当前仓库已经切换到 C++/Qt 工程，
 具备可复现的构建环境、自动测试和可运行的 Windows 系统托盘程序。
 
 当前版本按 F2 会先冻结全部显示器，再显示矩形选区。选区支持创建、移动和八方向缩放；进入标注
@@ -30,7 +30,7 @@ LandscapeCutter 正在从 Python 原型重构为 C++20 与 Qt 6。项目将先�
 - [x] **里程碑 1：Windows 图形基础**——D3D11、Windows Graphics Capture、显示器模型、
   Per-Monitor V2 DPI、全局快捷键和单实例；自动、真实桌面与人工验收均已完成。
 - [x] **里程碑 2：静态截图闭环**——冻结多显示器快照、矩形选区、复制和图片保存；自动、真实桌面与当前环境人工验收均已完成。
-- [ ] **里程碑 3：标注系统**——六类工具与统一输出已完成自动验证，等待人工验收。
+- [x] **里程碑 3：标注系统**——六类工具、属性编辑、撤销重做和统一输出已完成自动与人工验收。
 - [ ] **里程碑 4：静态贴图**——多个无边框置顶贴图及拖动、缩放和透明度控制。
 - [ ] **里程碑 5：实时区域贴图**——目标窗口相对选区、GPU 裁剪和实时显示。
 - [ ] **里程碑 6：产品化**——设置、快捷键配置、日志、安装包、便携包和兼容性测试。
@@ -107,6 +107,10 @@ Graphics Capture 与 session 关闭后 readback 验收。由于默认测试包�
 - [里程碑 2 详细设计](docs/superpowers/specs/2026-09-08-milestone-2-static-snip-design.md)
 - [里程碑 2 实施计划](docs/superpowers/plans/2026-09-08-milestone-2-static-snip.md)
 - [里程碑 2 执行进度](docs/superpowers/progress/2026-09-09-milestone-2-progress.md)
+- [里程碑 3 详细设计](docs/superpowers/specs/2026-09-09-milestone-3-annotation-system-design.md)
+- [里程碑 3 实施计划](docs/superpowers/plans/2026-09-09-milestone-3-annotation-system.md)
+- [里程碑 3 执行进度](docs/superpowers/progress/2026-09-09-milestone-3-progress.md)
+- [里程碑 4 详细设计](docs/superpowers/specs/2026-09-14-milestone-4-static-pins-design.md)
 - [后续体验与外观优化计划](docs/superpowers/plans/2026-09-09-experience-and-appearance-backlog.md)
 
 ## 许可证
