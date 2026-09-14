@@ -271,7 +271,7 @@ git commit -m "feat: add static pin geometry model"
 - Consumes: `PinId`, one owned `AnnotationDocument`, `PinGeometryModel`, shared `AnnotationToolbar`, annotation renderer/interaction, and the existing save/clipboard helpers.
 - Produces: one frameless topmost editable pin, normal/editing state transitions, document ownership transfer methods, and host-level copy/save/close signals.
 
-- [ ] **Step 1: Write failing viewing-state tests**
+- [x] **Step 1: Write failing viewing-state tests**
 
 ```cpp
 TEST_CASE("pin window starts frameless topmost and owns its document") {
@@ -300,7 +300,7 @@ TEST_CASE("pin window wheel routes zoom and opacity separately") {
 
 Also assert left drag moves only in Viewing mode, double-click enters Editing, the context menu actions exist with exact object names, reset actions update geometry/opacity, and closing emits one `closed(PinId)`.
 
-- [ ] **Step 2: Write failing editing and document-history tests**
+- [x] **Step 2: Write failing editing and document-history tests**
 
 ```cpp
 TEST_CASE("pin editing preserves pre-pin objects and history") {
@@ -332,7 +332,7 @@ TEST_CASE("pin done commits text and keeps vectors editable") {
 
 Cover rectangle creation, selecting/moving an existing object, Delete, Ctrl+Z/Y, Esc draft-first routing, double-clicking existing text, double-clicking blank space to finish, and no window movement while Editing.
 
-- [ ] **Step 3: Verify RED**
+- [x] **Step 3: Verify RED**
 
 ```powershell
 cmake --build --preset windows-msvc-debug --target landscapecutter_pin_tests
@@ -340,7 +340,7 @@ cmake --build --preset windows-msvc-debug --target landscapecutter_pin_tests
 
 Expected: compilation fails because `PinWindow` and `PinTypes` do not exist.
 
-- [ ] **Step 4: Implement PinTypes and viewing behavior**
+- [x] **Step 4: Implement PinTypes and viewing behavior**
 
 Define:
 
@@ -355,7 +355,7 @@ enum class PinWindowMode { Viewing, Editing, ChoosingSavePath, Exporting };
 
 Painting uses the document snapshot plus the current interaction draft and `drawAnnotations()` with a document-to-window transform. Viewing hides object selection handles and toolbar. Implement left-drag movement, anchored wheel zoom, Ctrl-wheel opacity, reset actions, context menu and single close notification.
 
-- [ ] **Step 5: Implement editing behavior and text lifecycle**
+- [x] **Step 5: Implement editing behavior and text lifecycle**
 
 Add:
 
@@ -381,7 +381,7 @@ Reuse `AnnotationToolbar` in Pin mode. Route mouse coordinates through `document
 
 `finishEditing()` commits nonempty text, cancels any noncommitted gesture, clears document selection, returns to Viewing and hides the toolbar. Esc cancels editor/draft first and only finishes when neither remains.
 
-- [ ] **Step 6: Run safe pin-window and annotation regressions**
+- [x] **Step 6: Run safe pin-window and annotation regressions**
 
 ```powershell
 cmake --build --preset windows-msvc-debug --target landscapecutter_pin_tests landscapecutter_annotation_tests landscapecutter_app_controller_tests
@@ -390,7 +390,7 @@ ctest --test-dir out/build/windows-msvc-debug -C Debug --output-on-failure -R "p
 
 Expected: all selected tests pass. Inspect `ctest -N -R` first and reject the command if any selected case belongs to graphics, capture or desktop integration.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```powershell
 git add src/pin/PinTypes.hpp src/pin/PinWindow.* tests/pin/PinWindowTests.cpp src/CMakeLists.txt tests/CMakeLists.txt
