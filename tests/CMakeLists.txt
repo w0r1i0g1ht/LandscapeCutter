@@ -43,6 +43,30 @@ add_custom_command(TARGET landscapecutter_annotation_tests POST_BUILD
         "$<TARGET_FILE_DIR:landscapecutter_annotation_tests>/platforms"
 )
 
+add_executable(landscapecutter_pin_tests
+    pin/PinGeometryModelTests.cpp
+)
+
+target_link_libraries(landscapecutter_pin_tests PRIVATE
+    Catch2::Catch2WithMain
+    landscapecutter_app_core
+)
+
+lc_enable_warnings(landscapecutter_pin_tests)
+
+catch_discover_tests(landscapecutter_pin_tests
+    PROPERTIES
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+)
+
+add_custom_command(TARGET landscapecutter_pin_tests POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E make_directory
+        "$<TARGET_FILE_DIR:landscapecutter_pin_tests>/platforms"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "$<TARGET_FILE:Qt6::QOffscreenIntegrationPlugin>"
+        "$<TARGET_FILE_DIR:landscapecutter_pin_tests>/platforms"
+)
+
 target_link_libraries(landscapecutter_unit_tests PRIVATE
     Catch2::Catch2WithMain
     landscapecutter_app_core

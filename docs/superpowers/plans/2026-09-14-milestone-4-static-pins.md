@@ -182,7 +182,7 @@ git commit -m "refactor: share annotation toolbar"
 - Consumes: a positive document pixel size, Qt top-level window rectangles, wheel deltas, and available screen rectangles.
 - Produces: deterministic viewing geometry and opacity rules without QWidget, D3D, WGC, or native handles.
 
-- [ ] **Step 1: Write failing scale, opacity, and recovery tests**
+- [x] **Step 1: Write failing scale, opacity, and recovery tests**
 
 Create a new `landscapecutter_pin_tests` Catch2 target using `QT_QPA_PLATFORM=offscreen`, and add:
 
@@ -210,7 +210,7 @@ TEST_CASE("pin recovery moves only a completely hidden window") {
 
 Add cases for negative wheel deltas, the 32-DIP minimum edge, aspect-ratio preservation, zero wheel delta, reset to original size, partially visible windows remaining unchanged, and empty screen input leaving geometry unchanged.
 
-- [ ] **Step 2: Build the pin target and verify RED**
+- [x] **Step 2: Build the pin target and verify RED**
 
 ```powershell
 cmake --build --preset windows-msvc-debug --target landscapecutter_pin_tests
@@ -218,7 +218,7 @@ cmake --build --preset windows-msvc-debug --target landscapecutter_pin_tests
 
 Expected: compilation fails because `PinGeometryModel` is absent.
 
-- [ ] **Step 3: Implement PinGeometryModel**
+- [x] **Step 3: Implement PinGeometryModel**
 
 Use the fixed zoom rule `factor = pow(1.1, angleDeltaY / 120.0)`. Preserve the anchor's normalized position within the old rectangle while rounding the new size and top-left consistently. Expose:
 
@@ -239,7 +239,7 @@ class PinGeometryModel final {
 
 Reject invalid constructor sizes with an invalid model rather than inventing a document size. Each 120 wheel units changes opacity by 0.05; accumulated partial deltas are not retained.
 
-- [ ] **Step 4: Run only PinGeometryModel tests**
+- [x] **Step 4: Run only PinGeometryModel tests**
 
 ```powershell
 cmake --build --preset windows-msvc-debug --target landscapecutter_pin_tests
@@ -248,7 +248,7 @@ ctest --test-dir out/build/windows-msvc-debug -C Debug --output-on-failure -R "p
 
 Expected: all `pin geometry` cases pass and no other target executes.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```powershell
 git add src/pin/PinGeometryModel.* tests/pin/PinGeometryModelTests.cpp src/CMakeLists.txt tests/CMakeLists.txt

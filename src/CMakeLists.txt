@@ -12,6 +12,8 @@ add_library(landscapecutter_app_core STATIC
     annotation/AnnotationRenderer.cpp
     annotation/AnnotationRenderer.hpp
     annotation/AnnotationTypes.hpp
+    pin/PinGeometryModel.cpp
+    pin/PinGeometryModel.hpp
     snip/SnipOverlay.cpp
     snip/SnipOverlay.hpp
     snip/SnipSession.cpp
