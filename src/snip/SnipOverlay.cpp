@@ -17,11 +17,13 @@
 #include <QSpinBox>
 #include <QResizeEvent>
 #include <QScreen>
+#include <QSignalBlocker>
 #include <QShowEvent>
 #include <QTimer>
 #include <QToolButton>
 #include <algorithm>
 #include <array>
+#include <type_traits>
 
 #ifdef Q_OS_WIN
 #include <QtGui/qscreen_platform.h>
@@ -41,6 +43,44 @@ constexpr int kToolbarMargin = 8;
 [[nodiscard]] QRectF localMonitorRect(const QSize& localSize) {
     return {0.0, 0.0, static_cast<qreal>(localSize.width()),
             static_cast<qreal>(localSize.height())};
+}
+
+[[nodiscard]] const annotation::AnnotationObject*
+selectedAnnotation(const annotation::AnnotationDocument* document) {
+    if (!document || !document->selectedId().has_value())
+        return nullptr;
+    const auto selectedId = *document->selectedId();
+    const auto found = std::find_if(document->objects().begin(), document->objects().end(),
+                                    [selectedId](const auto& object) {
+                                        return object.id == selectedId;
+                                    });
+    return found == document->objects().end() ? nullptr : &*found;
+}
+
+[[nodiscard]] std::optional<annotation::AnnotationStyle>
+selectedAnnotationStyle(const annotation::AnnotationDocument* document) {
+    const auto* object = selectedAnnotation(document);
+    if (!object)
+        return std::nullopt;
+    return std::visit(
+        [](const auto& value) -> std::optional<annotation::AnnotationStyle> {
+            using Value = std::decay_t<decltype(value)>;
+            if constexpr (std::is_same_v<Value, annotation::MosaicAnnotation>)
+                return std::nullopt;
+            else
+                return value.style;
+        },
+        object->payload);
+}
+
+[[nodiscard]] std::optional<int>
+selectedMosaicBlockSize(const annotation::AnnotationDocument* document) {
+    const auto* object = selectedAnnotation(document);
+    if (!object)
+        return std::nullopt;
+    if (const auto* mosaic = std::get_if<annotation::MosaicAnnotation>(&object->payload))
+        return mosaic->blockSize;
+    return std::nullopt;
 }
 } // namespace
 
@@ -69,7 +109,6 @@ SnipOverlay::SnipOverlay(FrozenMonitor monitor, SelectionModel& selection, QWidg
     toolbar_ = new QWidget(this);
     toolbar_->setObjectName(QStringLiteral("snipToolbar"));
     auto* layout = new QHBoxLayout(toolbar_);
-    toolbarLayout_ = layout;
     layout->setContentsMargins(4, 4, 4, 4);
     layout->setSpacing(4);
 
@@ -78,14 +117,22 @@ SnipOverlay::SnipOverlay(FrozenMonitor monitor, SelectionModel& selection, QWidg
         auto* button = new QToolButton(toolbar_);
         button->setObjectName(objectName);
         button->setText(text);
+        button->setCheckable(true);
+        button->setAutoExclusive(true);
         button->setFocusPolicy(Qt::NoFocus);
         layout->addWidget(button);
         connect(button, &QToolButton::clicked, this,
-                [this, tool] { emit annotationToolRequested(tool); });
+                [this, tool] {
+                    if (textEditor_ && interaction_ && tool != interaction_->tool())
+                        commitTextEditor();
+                    if (document_ && tool != annotation::AnnotationTool::Select)
+                        document_->clearSelection();
+                    emit annotationToolRequested(tool);
+                });
         return button;
     };
     selectToolButton_ =
-        addTool(QStringLiteral("selectToolButton"), tr("选择"), annotation::AnnotationTool::Select);
+        addTool(QStringLiteral("selectToolButton"), tr("编辑"), annotation::AnnotationTool::Select);
     rectangleToolButton_ = addTool(QStringLiteral("rectangleToolButton"), tr("矩形"),
                                    annotation::AnnotationTool::Rectangle);
     ellipseToolButton_ =
@@ -98,17 +145,29 @@ SnipOverlay::SnipOverlay(FrozenMonitor monitor, SelectionModel& selection, QWidg
                               annotation::AnnotationTool::Text);
     mosaicToolButton_ = addTool(QStringLiteral("mosaicToolButton"), tr("马赛克"),
                                 annotation::AnnotationTool::Mosaic);
+    selectToolButton_->setToolTip(tr("选择、移动或调整已有标注"));
+    rectangleToolButton_->setToolTip(tr("绘制矩形标注"));
+    ellipseToolButton_->setToolTip(tr("绘制椭圆标注"));
+    arrowToolButton_->setToolTip(tr("绘制箭头标注"));
+    brushToolButton_->setToolTip(tr("自由绘制标注"));
+    textToolButton_->setToolTip(tr("添加文字标注"));
+    mosaicToolButton_->setToolTip(tr("对区域添加马赛克"));
     colorButton_ = new QToolButton(toolbar_);
     colorButton_->setObjectName(QStringLiteral("colorButton"));
     colorButton_->setText(tr("颜色"));
+    colorButton_->setToolTip(tr("设置标注颜色"));
     colorButton_->setFocusPolicy(Qt::NoFocus);
     layout->addWidget(colorButton_);
     connect(colorButton_, &QToolButton::clicked, this, [this] {
         if (!interaction_)
             return;
-        const auto color = QColorDialog::getColor(interaction_->style().color, this, tr("选择颜色"));
+        const auto selectedStyle = interaction_->tool() == annotation::AnnotationTool::Select
+                                       ? selectedAnnotationStyle(document_)
+                                       : std::nullopt;
+        const auto color = QColorDialog::getColor(
+            selectedStyle.value_or(interaction_->style()).color, this, tr("选择颜色"));
         if (color.isValid()) {
-            auto style = interaction_->style();
+            auto style = selectedStyle.value_or(interaction_->style());
             style.color = color;
             interaction_->setStyle(style);
             emit annotationChanged();
@@ -118,15 +177,35 @@ SnipOverlay::SnipOverlay(FrozenMonitor monitor, SelectionModel& selection, QWidg
     lineWidth_->setObjectName(QStringLiteral("lineWidthSpinBox"));
     lineWidth_->setRange(1.0, 64.0);
     lineWidth_->setValue(3.0);
+    lineWidth_->setDecimals(1);
+    lineWidth_->setPrefix(tr("线宽 "));
+    lineWidth_->setSuffix(tr(" px"));
+    lineWidth_->setToolTip(tr("矩形、椭圆、箭头和画笔的线条宽度"));
     lineWidth_->setFocusPolicy(Qt::NoFocus);
     layout->addWidget(lineWidth_);
     connect(lineWidth_, &QDoubleSpinBox::valueChanged, this, [this](double width) {
         if (!interaction_)
             return;
-        auto style = interaction_->style();
+        const auto selectedStyle = interaction_->tool() == annotation::AnnotationTool::Select
+                                       ? selectedAnnotationStyle(document_)
+                                       : std::nullopt;
+        auto style = selectedStyle.value_or(interaction_->style());
         style.physicalSize = width;
         interaction_->setStyle(style);
         emit annotationChanged();
+    });
+    mosaicBlockSize_ = new QSpinBox(toolbar_);
+    mosaicBlockSize_->setObjectName(QStringLiteral("mosaicBlockSizeSpinBox"));
+    mosaicBlockSize_->setRange(1, 128);
+    mosaicBlockSize_->setValue(12);
+    mosaicBlockSize_->setPrefix(tr("块大小 "));
+    mosaicBlockSize_->setSuffix(tr(" px"));
+    mosaicBlockSize_->setToolTip(tr("马赛克像素块的大小"));
+    mosaicBlockSize_->setFocusPolicy(Qt::NoFocus);
+    layout->addWidget(mosaicBlockSize_);
+    connect(mosaicBlockSize_, &QSpinBox::valueChanged, this, [this](int blockSize) {
+        if (interaction_)
+            interaction_->setMosaicBlockSize(blockSize);
     });
     const auto addAction = [this, layout](const QString& objectName, const QString& text,
                                           auto signal) {
@@ -169,8 +248,6 @@ SnipOverlay::SnipOverlay(FrozenMonitor monitor, SelectionModel& selection, QWidg
 void SnipOverlay::refresh() {
     const bool annotationActive = annotating();
     const bool selected = hasSelection();
-    const bool selectedOnThisMonitor =
-        selected && selectionInLocalCoordinates().intersects(localMonitorRect(size()));
     copyButton_->setEnabled((selected || annotationActive) && !busy_);
     saveButton_->setEnabled((selected || annotationActive) && !busy_);
     cancelButton_->setEnabled(true);
@@ -184,17 +261,48 @@ void SnipOverlay::refresh() {
     brushToolButton_->setVisible(toolPickerAvailable);
     textToolButton_->setVisible(toolPickerAvailable);
     mosaicToolButton_->setVisible(toolPickerAvailable);
-    colorButton_->setVisible(annotationActive);
-    lineWidth_->setVisible(annotationActive);
-    if (mosaicBlockSize_)
-        mosaicBlockSize_->setVisible(annotationActive && interaction_->tool() == annotation::AnnotationTool::Mosaic);
+    const auto tool = annotationActive ? interaction_->tool() : annotation::AnnotationTool::Select;
+    const auto selectedStyle = annotationActive && tool == annotation::AnnotationTool::Select
+                                   ? selectedAnnotationStyle(document_)
+                                   : std::nullopt;
+    const auto selectedBlockSize = annotationActive && tool == annotation::AnnotationTool::Select
+                                       ? selectedMosaicBlockSize(document_)
+                                       : std::nullopt;
+    const auto* selectedObject = selectedAnnotation(document_);
+    const bool selectedText =
+        selectedObject && std::holds_alternative<annotation::TextAnnotation>(selectedObject->payload);
+    const bool usesColor = annotationActive &&
+                           ((tool == annotation::AnnotationTool::Select && selectedStyle.has_value()) ||
+                            (tool != annotation::AnnotationTool::Select &&
+                             tool != annotation::AnnotationTool::Mosaic));
+    const bool usesLineWidth = annotationActive &&
+                               ((tool == annotation::AnnotationTool::Select &&
+                                 selectedStyle.has_value() && !selectedText) ||
+                                tool == annotation::AnnotationTool::Rectangle ||
+                                tool == annotation::AnnotationTool::Ellipse ||
+                                tool == annotation::AnnotationTool::Arrow ||
+                                tool == annotation::AnnotationTool::Freehand);
+    colorButton_->setVisible(usesColor);
+    lineWidth_->setVisible(usesLineWidth);
+    mosaicBlockSize_->setVisible(annotationActive &&
+                                 (tool == annotation::AnnotationTool::Mosaic ||
+                                  (tool == annotation::AnnotationTool::Select &&
+                                   selectedBlockSize.has_value())));
     undoButton_->setVisible(annotationActive);
     redoButton_->setVisible(annotationActive);
     deleteButton_->setVisible(annotationActive);
     if (annotationActive) {
-        lineWidth_->setValue(interaction_->style().physicalSize);
-        if (mosaicBlockSize_)
-            mosaicBlockSize_->setValue(interaction_->mosaicBlockSize());
+        selectToolButton_->setChecked(tool == annotation::AnnotationTool::Select);
+        rectangleToolButton_->setChecked(tool == annotation::AnnotationTool::Rectangle);
+        ellipseToolButton_->setChecked(tool == annotation::AnnotationTool::Ellipse);
+        arrowToolButton_->setChecked(tool == annotation::AnnotationTool::Arrow);
+        brushToolButton_->setChecked(tool == annotation::AnnotationTool::Freehand);
+        textToolButton_->setChecked(tool == annotation::AnnotationTool::Text);
+        mosaicToolButton_->setChecked(tool == annotation::AnnotationTool::Mosaic);
+        const QSignalBlocker lineWidthBlocker(lineWidth_);
+        const QSignalBlocker mosaicBlocker(mosaicBlockSize_);
+        lineWidth_->setValue(selectedStyle.value_or(interaction_->style()).physicalSize);
+        mosaicBlockSize_->setValue(selectedBlockSize.value_or(interaction_->mosaicBlockSize()));
         undoButton_->setEnabled(document_->canUndo() && !busy_);
         redoButton_->setEnabled(document_->canRedo() && !busy_);
         deleteButton_->setEnabled(document_->selectedId().has_value() && !busy_);
@@ -260,8 +368,6 @@ void SnipOverlay::setBusy(bool busy) {
 void SnipOverlay::setToolbarHost(const bool toolbarHost) {
     toolbarHostAssigned_ = true;
     toolbarHost_ = toolbarHost;
-    if (toolbarHost_)
-        ensureMosaicBlockSizeControl();
     if (!ownsToolbar())
         cancelTextEditor();
     refresh();
@@ -272,7 +378,8 @@ void SnipOverlay::paintEvent(QPaintEvent* event) {
     QPainter painter(this);
     painter.drawImage(rect(), monitor_.image);
 
-    if (annotating()) {
+    const bool annotationActive = annotating();
+    if (annotationActive) {
         auto snapshot = document_->snapshot();
         if (const auto currentDraft = interaction_->draft(); currentDraft.has_value()) {
             const auto committed = std::find_if(
@@ -286,10 +393,10 @@ void SnipOverlay::paintEvent(QPaintEvent* event) {
         }
         annotation::drawAnnotations(painter, snapshot, documentToLocalTransform(),
                                     localMonitorRect(size()));
-        return;
     }
 
-    const auto selected = selectionInLocalCoordinates();
+    const auto selected = annotationActive ? lockedSelectionInLocalCoordinates()
+                                           : selectionInLocalCoordinates();
     if (selected.isEmpty() || !selected.intersects(localMonitorRect(size()))) {
         painter.fillRect(rect(), QColor(0, 0, 0, 120));
         return;
@@ -303,9 +410,14 @@ void SnipOverlay::paintEvent(QPaintEvent* event) {
 
     painter.setPen(QPen(Qt::white, 1));
     painter.drawRect(selected);
-    const QString dimensions =
-        QStringLiteral("%1 × %2").arg(selection_.rect().width()).arg(selection_.rect().height());
+    const auto physicalSelection = annotationActive ? lockedSelection_ : selection_.rect();
+    const QString dimensions = QStringLiteral("%1 × %2")
+                                   .arg(physicalSelection.width())
+                                   .arg(physicalSelection.height());
     painter.drawText(selected.topLeft() + QPointF{2.0, -4.0}, dimensions);
+
+    if (annotationActive)
+        return;
 
     painter.setBrush(Qt::white);
     const std::array<QPointF, 8> handles{
@@ -601,19 +713,18 @@ QRectF SnipOverlay::selectionInLocalCoordinates() const {
             selection.width() * horizontalScale, selection.height() * verticalScale};
 }
 
-void SnipOverlay::ensureMosaicBlockSizeControl() {
-    if (mosaicBlockSize_)
-        return;
-    mosaicBlockSize_ = new QSpinBox(toolbar_);
-    mosaicBlockSize_->setObjectName(QStringLiteral("mosaicBlockSizeSpinBox"));
-    mosaicBlockSize_->setRange(1, 128);
-    mosaicBlockSize_->setValue(12);
-    mosaicBlockSize_->setFocusPolicy(Qt::NoFocus);
-    toolbarLayout_->addWidget(mosaicBlockSize_);
-    connect(mosaicBlockSize_, &QSpinBox::valueChanged, this, [this](int blockSize) {
-        if (interaction_)
-            interaction_->setMosaicBlockSize(blockSize);
-    });
+QRectF SnipOverlay::lockedSelectionInLocalCoordinates() const {
+    if (!lockedSelection_.isValid() || monitor_.geometry.width() <= 0 ||
+        monitor_.geometry.height() <= 0) {
+        return {};
+    }
+
+    const qreal horizontalScale = static_cast<qreal>(width()) / monitor_.geometry.width();
+    const qreal verticalScale = static_cast<qreal>(height()) / monitor_.geometry.height();
+    return {(lockedSelection_.x() - monitor_.geometry.x()) * horizontalScale,
+            (lockedSelection_.y() - monitor_.geometry.y()) * verticalScale,
+            lockedSelection_.width() * horizontalScale,
+            lockedSelection_.height() * verticalScale};
 }
 
 QPointF SnipOverlay::annotationPoint(const QMouseEvent* event) const {
@@ -746,12 +857,16 @@ void SnipOverlay::positionToolbar() {
 
 void SnipOverlay::requestCopyIfSelected() {
     if ((hasSelection() || annotating()) && !busy_) {
+        if (textEditor_)
+            commitTextEditor();
         emit copyRequested();
     }
 }
 
 void SnipOverlay::requestSaveIfSelected() {
     if ((hasSelection() || annotating()) && !busy_) {
+        if (textEditor_)
+            commitTextEditor();
         emit saveRequested();
     }
 }

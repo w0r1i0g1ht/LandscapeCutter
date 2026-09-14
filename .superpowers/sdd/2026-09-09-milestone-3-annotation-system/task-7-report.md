@@ -27,11 +27,17 @@ Offscreen overlays also no longer schedule the Windows-only delayed physical pla
 
 The export/lifecycle coverage includes direct and annotated failures, Selecting and Annotating save-dialog cancellation, exact annotated clipboard and PNG output, JPEG decoded size and mean RGB error at most 12, successful cleanup, stale completion rejection, destruction during an active worker, display invalidation during preparation/text/export, rapid duplicate session begin suppression, overlay close cancellation, unique cross-monitor toolbar ownership, and existing no-annotation Milestone 2 copy/save behavior.
 
+## Post-acceptance usability repair
+
+Manual testing found that the annotation preview dropped the outside-selection dim mask, pending text was absent from Copy/Save output, and the live text editor consumed later canvas input after the user clicked another drawing tool. The toolbar also exposed unlabeled `3.00` and `12` controls and gave no persistent indication of the active tool.
+
+The overlay now paints annotations and then restores the locked-selection mask and border without resize handles. Copy, Save, and tool changes commit the active text editor before dispatching their action. Tool buttons are exclusive and checked, Select is labeled Edit with a purpose tooltip, and the numeric controls identify line width and mosaic block size with pixel units while appearing only for relevant tools. In Edit mode those controls follow the selected payload and preserve unrelated style values. Focused regression tests cover each reported behavior, including composed text pixels, selected-object property changes, and both creation/editing tool-switch paths. The all-target build passed; the full discovery run passed all 218 non-desktop cases, and the desktop-session run passed 4/4 real capture cases.
+
 An initial attempt incorrectly forced `QT_QPA_PLATFORM=offscreen` over the entire CTest run. The 207 non-desktop cases passed, while real WGC/window tests and product process tests failed because their native platform was suppressed. The authoritative runs separated default and desktop tests as the presets do; both passed in their required environments.
 
 ## Process and environment audit
 
-Final validation introduced no new `LandscapeCutter`, helper, or `ctest` residue. Two controller-test processes from earlier Task 6/7 diagnostics, PIDs `35352` and `41260`, remain access-protected. Their executable paths could not be read, so they were treated as protected rather than force-terminated or reused. They did not lock the final `runtime-red` build or affect its 212/212 plus 4/4 results.
+The original milestone validation introduced no new `LandscapeCutter`, helper, or `ctest` residue. Two controller-test processes from earlier Task 6/7 diagnostics, PIDs `35352` and `41260`, remain access-protected. Their executable paths could not be read, so they were treated as protected rather than force-terminated or reused. They did not lock that build or affect its then-current 212/212 plus 4/4 results. The later usability repair has its updated 218 plus 4/4 evidence above.
 
 ## Remaining acceptance
 

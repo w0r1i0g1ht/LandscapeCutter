@@ -4,6 +4,8 @@
 
 #include <QApplication>
 #include <QClipboard>
+#include <QDoubleSpinBox>
+#include <QHBoxLayout>
 #include <QKeyEvent>
 #include <QMouseEvent>
 #include <QPainter>
@@ -241,6 +243,149 @@ TEST_CASE("annotation overlay presents all Task 4 controls on the toolbar host")
     CHECK(overlay.findChild<QToolButton*>("deleteButton") != nullptr);
 }
 
+TEST_CASE("annotation overlay keeps the area outside the locked selection dimmed") {
+    ApplicationFixture fixture;
+    SelectionModel selection;
+    selection.setBounds({0, 0, 40, 30});
+    auto document = annotationDocument({20, 14});
+    AnnotationInteraction interaction(document);
+    SnipOverlay overlay{{{0, 0, 40, 30}, frozenMonitor().image}, selection};
+    overlay.setToolbarHost(false);
+    overlay.setAnnotationContext(&document, &interaction, {10, 8, 20, 14});
+
+    QImage preview({40, 30}, QImage::Format_RGB32);
+    preview.fill(Qt::black);
+    QPainter painter(&preview);
+    overlay.render(&painter);
+    painter.end();
+
+    CHECK(preview.pixelColor(20, 15) == QColor(Qt::red));
+    CHECK(preview.pixelColor(2, 2).red() < QColor(Qt::red).red());
+    CHECK(preview.pixelColor(2, 2) != QColor(Qt::red));
+    CHECK(preview.pixelColor(10, 8) == QColor(Qt::white));
+}
+
+TEST_CASE("annotation toolbar explains tools and only shows the relevant numeric setting") {
+    ApplicationFixture fixture;
+    SelectionModel selection;
+    selection.setBounds({0, 0, 40, 30});
+    auto document = annotationDocument();
+    AnnotationInteraction interaction(document);
+    SnipOverlay overlay{frozenMonitor(), selection};
+    overlay.setToolbarHost(true);
+    overlay.setAnnotationContext(&document, &interaction, {-40, 10, 40, 30});
+
+    auto* edit = overlay.findChild<QToolButton*>("selectToolButton");
+    auto* rectangle = overlay.findChild<QToolButton*>("rectangleToolButton");
+    auto* mosaic = overlay.findChild<QToolButton*>("mosaicToolButton");
+    auto* color = overlay.findChild<QToolButton*>("colorButton");
+    auto* lineWidth = overlay.findChild<QDoubleSpinBox*>("lineWidthSpinBox");
+    auto* blockSize = overlay.findChild<QSpinBox*>("mosaicBlockSizeSpinBox");
+    auto* undo = overlay.findChild<QToolButton*>("undoButton");
+    REQUIRE(edit != nullptr);
+    REQUIRE(rectangle != nullptr);
+    REQUIRE(mosaic != nullptr);
+    REQUIRE(color != nullptr);
+    REQUIRE(lineWidth != nullptr);
+    REQUIRE(blockSize != nullptr);
+    REQUIRE(undo != nullptr);
+    CHECK(edit->text() == QStringLiteral("编辑"));
+    CHECK(edit->toolTip().contains(QStringLiteral("移动")));
+    CHECK(edit->isCheckable());
+    CHECK(rectangle->isCheckable());
+    CHECK(edit->isChecked());
+    CHECK(lineWidth->prefix() == QStringLiteral("线宽 "));
+    CHECK(lineWidth->suffix() == QStringLiteral(" px"));
+    CHECK(lineWidth->decimals() == 1);
+    CHECK(blockSize->prefix() == QStringLiteral("块大小 "));
+    CHECK(blockSize->suffix() == QStringLiteral(" px"));
+    CHECK(overlay.findChild<QHBoxLayout*>()->indexOf(blockSize) <
+          overlay.findChild<QHBoxLayout*>()->indexOf(undo));
+    CHECK(lineWidth->isHidden());
+    CHECK(blockSize->isHidden());
+    CHECK(color->isHidden());
+
+    QObject::connect(&overlay, &SnipOverlay::annotationToolRequested, [&interaction, &overlay](AnnotationTool tool) {
+        interaction.setTool(tool);
+        overlay.refresh();
+    });
+    rectangle->click();
+    CHECK(rectangle->isChecked());
+    CHECK_FALSE(lineWidth->isHidden());
+    CHECK(blockSize->isHidden());
+    CHECK_FALSE(color->isHidden());
+    mosaic->click();
+    CHECK(mosaic->isChecked());
+    CHECK(lineWidth->isHidden());
+    CHECK_FALSE(blockSize->isHidden());
+    CHECK(color->isHidden());
+}
+
+TEST_CASE("edit controls follow the selected annotation without overwriting unrelated style") {
+    ApplicationFixture fixture;
+    SelectionModel selection;
+    selection.setBounds({0, 0, 80, 40});
+    auto document = annotationDocument({80, 40});
+    const auto rectangleId =
+        document.addObject(RectangleAnnotation{{4, 4, 20, 12}, {Qt::blue, 7}});
+    const auto textId =
+        document.addObject(TextAnnotation{{30, 4}, QStringLiteral("text"), {Qt::green, 24}});
+    const auto mosaicId = document.addObject(MosaicAnnotation{{4, 20, 30, 15}, 17});
+    REQUIRE(rectangleId.has_value());
+    REQUIRE(textId.has_value());
+    REQUIRE(mosaicId.has_value());
+    AnnotationInteraction interaction(document);
+    interaction.setTool(AnnotationTool::Select);
+    QImage image({80, 40}, QImage::Format_RGB32);
+    image.fill(Qt::white);
+    SnipOverlay overlay{{{0, 0, 80, 40}, image}, selection};
+    overlay.setToolbarHost(true);
+    overlay.setAnnotationContext(&document, &interaction, {0, 0, 80, 40});
+    auto* rectangle = overlay.findChild<QToolButton*>("rectangleToolButton");
+    auto* color = overlay.findChild<QToolButton*>("colorButton");
+    auto* lineWidth = overlay.findChild<QDoubleSpinBox*>("lineWidthSpinBox");
+    auto* blockSize = overlay.findChild<QSpinBox*>("mosaicBlockSizeSpinBox");
+    REQUIRE(rectangle != nullptr);
+    REQUIRE(color != nullptr);
+    REQUIRE(lineWidth != nullptr);
+    REQUIRE(blockSize != nullptr);
+
+    REQUIRE(document.select(*rectangleId));
+    overlay.refresh();
+    CHECK_FALSE(color->isHidden());
+    CHECK_FALSE(lineWidth->isHidden());
+    CHECK(blockSize->isHidden());
+    CHECK(lineWidth->value() == 7.0);
+    lineWidth->setValue(9.0);
+    CHECK(std::get<RectangleAnnotation>(document.objects()[0].payload).style ==
+          AnnotationStyle{Qt::blue, 9});
+    REQUIRE(document.undo());
+    CHECK(std::get<RectangleAnnotation>(document.objects()[0].payload).style ==
+          AnnotationStyle{Qt::blue, 7});
+    REQUIRE(document.redo());
+
+    REQUIRE(document.select(*textId));
+    overlay.refresh();
+    CHECK_FALSE(color->isHidden());
+    CHECK(lineWidth->isHidden());
+    CHECK(blockSize->isHidden());
+
+    REQUIRE(document.select(*mosaicId));
+    overlay.refresh();
+    CHECK(color->isHidden());
+    CHECK(lineWidth->isHidden());
+    CHECK_FALSE(blockSize->isHidden());
+    CHECK(blockSize->value() == 17);
+
+    QObject::connect(&overlay, &SnipOverlay::annotationToolRequested,
+                     [&interaction, &overlay](AnnotationTool tool) {
+                         interaction.setTool(tool);
+                         overlay.refresh();
+                     });
+    rectangle->click();
+    CHECK_FALSE(document.selectedId().has_value());
+}
+
 TEST_CASE("annotation mosaic toolbar selects the tool and exposes its bounded block control") {
     ApplicationFixture fixture;
     SelectionModel selection;
@@ -344,7 +489,8 @@ TEST_CASE("annotation mosaic overlay previews join exactly at a monitor boundary
     left.render(&painter, {0, 0}, QRegion{0, 0, 20, 20});
     right.render(&painter, {20, 0}, QRegion{0, 0, 20, 20});
     painter.end();
-    CHECK(assembled == composeAnnotations(document.snapshot()));
+    const auto exported = composeAnnotations(document.snapshot());
+    CHECK(assembled.copy(18, 1, 4, 18) == exported.copy(18, 1, 4, 18));
 }
 
 TEST_CASE("annotation overlay replaces a moved draft in every shared preview") {
@@ -444,6 +590,136 @@ TEST_CASE("annotation text editor exists only on the active toolbar host and com
     CHECK(std::get<TextAnnotation>(document.objects().front().payload).text == QStringLiteral("first"));
     REQUIRE(document.undo());
     CHECK(document.objects().empty());
+}
+
+TEST_CASE("copy and save commit pending text before requesting export") {
+    ApplicationFixture fixture;
+    const auto verify = [](const QString& buttonName, bool copy) {
+        SelectionModel selection;
+        selection.setBounds({0, 0, 80, 40});
+        auto document = annotationDocument({80, 40});
+        AnnotationInteraction interaction(document);
+        interaction.setTool(AnnotationTool::Text);
+        QImage image({80, 40}, QImage::Format_RGB32);
+        image.fill(Qt::white);
+        SnipOverlay overlay{{{0, 0, 80, 40}, image}, selection};
+        overlay.setToolbarHost(true);
+        overlay.setAnnotationContext(&document, &interaction, {0, 0, 80, 40});
+        overlay.createTextEditor({4, 4});
+        auto* editor = overlay.findChild<QPlainTextEdit*>("annotationTextEditor");
+        auto* button = overlay.findChild<QToolButton*>(buttonName);
+        REQUIRE(editor != nullptr);
+        REQUIRE(button != nullptr);
+        editor->setPlainText(QStringLiteral("hello"));
+        int requests{};
+        const auto verifyCommitted = [&] {
+            ++requests;
+            REQUIRE(document.objects().size() == 1);
+            CHECK(std::get<TextAnnotation>(document.objects().front().payload).text ==
+                  QStringLiteral("hello"));
+            CHECK(composeAnnotations(document.snapshot()) != document.snapshot().base);
+        };
+        if (copy)
+            QObject::connect(&overlay, &SnipOverlay::copyRequested, verifyCommitted);
+        else
+            QObject::connect(&overlay, &SnipOverlay::saveRequested, verifyCommitted);
+
+        button->click();
+
+        CHECK(requests == 1);
+        CHECK(overlay.findChild<QPlainTextEdit*>("annotationTextEditor") == nullptr);
+        REQUIRE(document.undo());
+        CHECK(document.objects().empty());
+    };
+
+    verify(QStringLiteral("copyButton"), true);
+    verify(QStringLiteral("saveButton"), false);
+}
+
+TEST_CASE("switching away from text commits it and allows the next drawing tool") {
+    ApplicationFixture fixture;
+    SelectionModel selection;
+    selection.setBounds({0, 0, 80, 40});
+    auto document = annotationDocument({80, 40});
+    AnnotationInteraction interaction(document);
+    interaction.setTool(AnnotationTool::Text);
+    QImage image({80, 40}, QImage::Format_RGB32);
+    image.fill(Qt::white);
+    SnipOverlay overlay{{{0, 0, 80, 40}, image}, selection};
+    overlay.setToolbarHost(true);
+    overlay.setAnnotationContext(&document, &interaction, {0, 0, 80, 40});
+    QObject::connect(&overlay, &SnipOverlay::annotationToolRequested,
+                     [&interaction, &overlay](AnnotationTool tool) {
+                         interaction.setTool(tool);
+                         overlay.refresh();
+                     });
+    overlay.createTextEditor({4, 4});
+    auto* editor = overlay.findChild<QPlainTextEdit*>("annotationTextEditor");
+    auto* rectangle = overlay.findChild<QToolButton*>("rectangleToolButton");
+    REQUIRE(editor != nullptr);
+    REQUIRE(rectangle != nullptr);
+    editor->setPlainText(QStringLiteral("hello"));
+
+    rectangle->click();
+
+    CHECK(overlay.findChild<QPlainTextEdit*>("annotationTextEditor") == nullptr);
+    CHECK(interaction.tool() == AnnotationTool::Rectangle);
+    REQUIRE(document.objects().size() == 1);
+    CHECK(std::holds_alternative<TextAnnotation>(document.objects().front().payload));
+
+    QMouseEvent press{QEvent::MouseButtonPress, QPointF{30, 8}, QPointF{30, 8},
+                      Qt::LeftButton, Qt::LeftButton, Qt::NoModifier};
+    QMouseEvent move{QEvent::MouseMove, QPointF{60, 30}, QPointF{60, 30},
+                     Qt::NoButton, Qt::LeftButton, Qt::NoModifier};
+    QMouseEvent release{QEvent::MouseButtonRelease, QPointF{60, 30}, QPointF{60, 30},
+                        Qt::LeftButton, Qt::NoButton, Qt::NoModifier};
+    QApplication::sendEvent(&overlay, &press);
+    QApplication::sendEvent(&overlay, &move);
+    QApplication::sendEvent(&overlay, &release);
+
+    REQUIRE(document.objects().size() == 2);
+    CHECK(std::holds_alternative<RectangleAnnotation>(document.objects().back().payload));
+}
+
+TEST_CASE("switching from editing existing text to the text tool commits before the tool change") {
+    ApplicationFixture fixture;
+    SelectionModel selection;
+    selection.setBounds({0, 0, 80, 40});
+    auto document = annotationDocument({80, 40});
+    const auto id =
+        document.addObject(TextAnnotation{{4, 4}, QStringLiteral("old"), {Qt::red, 24}});
+    REQUIRE(id.has_value());
+    REQUIRE(document.select(*id));
+    AnnotationInteraction interaction(document);
+    interaction.setTool(AnnotationTool::Select);
+    QImage image({80, 40}, QImage::Format_RGB32);
+    image.fill(Qt::white);
+    SnipOverlay overlay{{{0, 0, 80, 40}, image}, selection};
+    overlay.setToolbarHost(true);
+    overlay.setAnnotationContext(&document, &interaction, {0, 0, 80, 40});
+    overlay.editTextEditor(*id);
+    auto* editor = overlay.findChild<QPlainTextEdit*>("annotationTextEditor");
+    auto* text = overlay.findChild<QToolButton*>("textToolButton");
+    REQUIRE(editor != nullptr);
+    REQUIRE(text != nullptr);
+    editor->setPlainText(QStringLiteral("new"));
+    int requests{};
+    QObject::connect(&overlay, &SnipOverlay::annotationToolRequested,
+                     [&](AnnotationTool tool) {
+                         ++requests;
+                         CHECK(tool == AnnotationTool::Text);
+                         CHECK(std::get<TextAnnotation>(document.objects().front().payload).text ==
+                               QStringLiteral("new"));
+                         CHECK(overlay.findChild<QPlainTextEdit*>("annotationTextEditor") == nullptr);
+                         interaction.setTool(tool);
+                         overlay.refresh();
+                     });
+
+    text->click();
+
+    CHECK(requests == 1);
+    CHECK(interaction.tool() == AnnotationTool::Text);
+    CHECK_FALSE(document.selectedId().has_value());
 }
 
 TEST_CASE("annotation text editor keeps editing shortcuts local and escapes without copying") {

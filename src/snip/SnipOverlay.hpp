@@ -20,7 +20,6 @@ class QResizeEvent;
 class QShowEvent;
 class QToolButton;
 class QDoubleSpinBox;
-class QHBoxLayout;
 class QSpinBox;
 class QPlainTextEdit;
 
@@ -79,6 +78,7 @@ class SnipOverlay final : public QWidget {
   private:
     [[nodiscard]] QPoint physicalCursor(const QMouseEvent* event) const;
     [[nodiscard]] QRectF selectionInLocalCoordinates() const;
+    [[nodiscard]] QRectF lockedSelectionInLocalCoordinates() const;
     [[nodiscard]] QPointF annotationPoint(const QMouseEvent* event) const;
     [[nodiscard]] QTransform documentToLocalTransform() const;
     [[nodiscard]] bool hasSelection() const noexcept;
@@ -88,7 +88,6 @@ class SnipOverlay final : public QWidget {
     void beginTextEditor(QPointF anchor, std::optional<annotation::AnnotationObject> original = std::nullopt);
     void commitTextEditor();
     void cancelTextEditor();
-    void ensureMosaicBlockSizeControl();
     void positionToolbar();
     void requestCopyIfSelected();
     void requestSaveIfSelected();
@@ -111,7 +110,6 @@ class SnipOverlay final : public QWidget {
     QToolButton* undoButton_{};
     QToolButton* redoButton_{};
     QToolButton* deleteButton_{};
-    QHBoxLayout* toolbarLayout_{};
     QDoubleSpinBox* lineWidth_{};
     QSpinBox* mosaicBlockSize_{};
     annotation::AnnotationDocument* document_{};
