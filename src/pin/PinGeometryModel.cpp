@@ -8,6 +8,39 @@ namespace lc::pin {
 namespace {
 constexpr int kMinimumEdge = 32;
 
+bool usableScreen(const PinScreenGeometry& screen) noexcept {
+    return screen.physicalGeometry.width() > 0 && screen.physicalGeometry.height() > 0 &&
+           screen.logicalGeometry.width() > 0 && screen.logicalGeometry.height() > 0;
+}
+
+const PinScreenGeometry* screenForSelection(
+    const QRect& physicalSelection, const QList<PinScreenGeometry>& screens) noexcept {
+    for (const auto& screen : screens) {
+        if (usableScreen(screen) && screen.physicalGeometry.contains(physicalSelection.topLeft()))
+            return &screen;
+    }
+
+    const PinScreenGeometry* best = nullptr;
+    qint64 bestArea{};
+    for (const auto& screen : screens) {
+        if (!usableScreen(screen))
+            continue;
+        const auto intersection = screen.physicalGeometry.intersected(physicalSelection);
+        const auto area = static_cast<qint64>(intersection.width()) * intersection.height();
+        if (area > bestArea) {
+            best = &screen;
+            bestArea = area;
+        }
+    }
+    return best;
+}
+
+int boundedRound(const qreal value) noexcept {
+    constexpr auto minimum = static_cast<qreal>(std::numeric_limits<int>::min());
+    constexpr auto maximum = static_cast<qreal>(std::numeric_limits<int>::max());
+    return static_cast<int>(std::llround(std::clamp(value, minimum, maximum)));
+}
+
 qint64 squaredDistanceTo(const QPoint point, const QRect& rect) noexcept {
     const auto nearestX = std::clamp(point.x(), rect.left(), rect.right());
     const auto nearestY = std::clamp(point.y(), rect.top(), rect.bottom());
@@ -17,12 +50,35 @@ qint64 squaredDistanceTo(const QPoint point, const QRect& rect) noexcept {
 }
 } // namespace
 
+QRect initialPinWindowRect(const QRect physicalSelection, const QSize documentPhysicalSize,
+                           const QList<PinScreenGeometry>& screens) noexcept {
+    if (documentPhysicalSize.width() <= 0 || documentPhysicalSize.height() <= 0)
+        return {};
+
+    const auto* screen = screenForSelection(physicalSelection, screens);
+    if (screen == nullptr)
+        return {physicalSelection.topLeft(), documentPhysicalSize};
+
+    const auto scaleX = static_cast<qreal>(screen->logicalGeometry.width()) /
+                        screen->physicalGeometry.width();
+    const auto scaleY = static_cast<qreal>(screen->logicalGeometry.height()) /
+                        screen->physicalGeometry.height();
+    const auto relative = physicalSelection.topLeft() - screen->physicalGeometry.topLeft();
+    const QPoint logicalTopLeft{
+        boundedRound(screen->logicalGeometry.left() + relative.x() * scaleX),
+        boundedRound(screen->logicalGeometry.top() + relative.y() * scaleY)};
+    const QSize logicalSize{std::max(1, boundedRound(documentPhysicalSize.width() * scaleX)),
+                            std::max(1, boundedRound(documentPhysicalSize.height() * scaleY))};
+    return {logicalTopLeft, logicalSize};
+}
+
 PinGeometryModel::PinGeometryModel(QSize documentSize, QRect windowRect)
-    : documentSize_(documentSize), windowRect_(windowRect),
+    : documentSize_(documentSize), originalWindowSize_(windowRect.size()), windowRect_(windowRect),
       valid_(documentSize.width() > 0 && documentSize.height() > 0 && windowRect.width() > 0 &&
              windowRect.height() > 0) {
     if (!valid_) {
         documentSize_ = {};
+        originalWindowSize_ = {};
         windowRect_ = {};
     }
 }
@@ -72,7 +128,7 @@ void PinGeometryModel::adjustOpacity(const int angleDeltaY) noexcept {
 
 void PinGeometryModel::resetSize() noexcept {
     if (valid_)
-        windowRect_.setSize(documentSize_);
+        windowRect_.setSize(originalWindowSize_);
 }
 
 bool PinGeometryModel::ensureOperable(const QList<QRect>& availableGeometries) noexcept {

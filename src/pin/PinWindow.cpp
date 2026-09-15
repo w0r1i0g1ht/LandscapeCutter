@@ -111,14 +111,14 @@ PinWindow::~PinWindow() {
 }
 
 QString PinWindow::attachDocument(std::unique_ptr<annotation::AnnotationDocument>& document,
-                                  const QPoint preferredTopLeft) {
+                                  const QRect initialWindowRect) {
     if (document_)
         return tr("贴图窗口已经包含图片。");
     if (!document || document->snapshot().base.isNull())
         return tr("无法创建贴图：图片为空。");
 
     const auto size = document->snapshot().base.size();
-    PinGeometryModel geometry(size, QRect(preferredTopLeft, size));
+    PinGeometryModel geometry(size, initialWindowRect);
     if (!geometry.valid())
         return tr("无法创建贴图：图片尺寸无效。");
     auto interaction = std::make_unique<annotation::AnnotationInteraction>(*document);

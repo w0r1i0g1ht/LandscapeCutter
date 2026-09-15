@@ -5,6 +5,15 @@
 #include <QSize>
 
 namespace lc::pin {
+struct PinScreenGeometry final {
+    QRect physicalGeometry;
+    QRect logicalGeometry;
+    QRect availableLogicalGeometry;
+};
+
+[[nodiscard]] QRect initialPinWindowRect(QRect physicalSelection, QSize documentPhysicalSize,
+                                         const QList<PinScreenGeometry>& screens) noexcept;
+
 class PinGeometryModel final {
   public:
     PinGeometryModel(QSize documentSize, QRect windowRect);
@@ -21,6 +30,7 @@ class PinGeometryModel final {
 
   private:
     QSize documentSize_;
+    QSize originalWindowSize_;
     QRect windowRect_;
     qreal opacity_{1.0};
     bool valid_{};

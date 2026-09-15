@@ -42,7 +42,7 @@ class PinWindow final : public QWidget {
     ~PinWindow() override;
 
     QString attachDocument(std::unique_ptr<annotation::AnnotationDocument>& document,
-                           QPoint preferredTopLeft);
+                           QRect initialWindowRect);
     [[nodiscard]] annotation::AnnotationDocument* document() const noexcept;
     [[nodiscard]] PinWindowMode mode() const noexcept;
     [[nodiscard]] PinId id() const noexcept;

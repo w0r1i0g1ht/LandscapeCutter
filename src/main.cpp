@@ -25,12 +25,14 @@
 #include <QScreen>
 #include <QStandardPaths>
 #include <QTimer>
+#include <QtGui/qscreen_platform.h>
 
 #include <Windows.h>
 
 #include <winrt/base.h>
 
 #include <string_view>
+#include <limits>
 #include <vector>
 
 namespace {
@@ -74,6 +76,31 @@ QList<QRect> availableScreenGeometries() {
     for (const auto* screen : QGuiApplication::screens()) {
         if (screen != nullptr)
             geometries.push_back(screen->availableGeometry());
+    }
+    return geometries;
+}
+
+QList<lc::pin::PinScreenGeometry> pinScreenGeometries(
+    const std::vector<lc::platform::windows::MonitorDescriptor>& monitors) {
+    QList<lc::pin::PinScreenGeometry> geometries;
+    for (const auto& monitor : monitors) {
+        const auto physicalWidth = lc::platform::width(monitor.desktopRect);
+        const auto physicalHeight = lc::platform::height(monitor.desktopRect);
+        if (physicalWidth <= 0 || physicalHeight <= 0 ||
+            physicalWidth > std::numeric_limits<int>::max() ||
+            physicalHeight > std::numeric_limits<int>::max()) {
+            continue;
+        }
+        for (QScreen* screen : QGuiApplication::screens()) {
+            const auto* native = screen->nativeInterface<QNativeInterface::QWindowsScreen>();
+            if (native == nullptr || native->handle() != monitor.nativeHandle)
+                continue;
+            geometries.push_back(
+                {{monitor.desktopRect.left, monitor.desktopRect.top,
+                  static_cast<int>(physicalWidth), static_cast<int>(physicalHeight)},
+                 screen->geometry(), screen->availableGeometry()});
+            break;
+        }
     }
     return geometries;
 }
@@ -152,12 +179,13 @@ int main(int argc, char* argv[]) {
     });
     lc::snip::SnapshotReadback readback(deviceManager);
     lc::snip::SnapshotBatch batch(captureService, deviceManager, readback.function());
-    lc::pin::PinManager pinManager({}, pinSavePathChooser(), availableScreenGeometries);
+    lc::pin::PinManager pinManager({}, pinSavePathChooser(),
+                                   [&catalog] { return pinScreenGeometries(catalog.monitors()); });
     lc::snip::SnipSession snipSession(
         batch, {}, {},
         [&pinManager](std::unique_ptr<lc::annotation::AnnotationDocument>& document,
-                      const QPoint preferredTopLeft) {
-            return pinManager.create(std::move(document), preferredTopLeft);
+                      const QRect physicalSelection) {
+            return pinManager.create(std::move(document), physicalSelection);
         });
     QObject::connect(&snipSession, &lc::snip::SnipSession::errorOccurred, &controller,
                      &lc::app::AppController::showErrorMessage);

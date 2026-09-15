@@ -63,12 +63,15 @@ struct ControlledSavePathChooser {
 
 struct CapturedPin {
     lc::pin::CreatePin callback() {
-        return [this](std::unique_ptr<lc::annotation::AnnotationDocument>& document, QPoint) {
+        return [this](std::unique_ptr<lc::annotation::AnnotationDocument>& document,
+                      const QRect selection) {
+            physicalSelection = selection;
             captured = std::move(document);
             return lc::pin::PinCreateResult{.id = 1};
         };
     }
     std::unique_ptr<lc::annotation::AnnotationDocument> captured;
+    QRect physicalSelection;
 };
 
 QImage annotationTestImage() {
@@ -1240,6 +1243,7 @@ TEST_CASE("snip session pins a prepared selection as one RGB32 document") {
     REQUIRE(captured.captured != nullptr);
     CHECK(captured.captured->snapshot().base.size() == QSize(10, 7));
     CHECK(captured.captured->snapshot().base.devicePixelRatio() == 1.0);
+    CHECK(captured.physicalSelection == QRect(2, 3, 10, 7));
     CHECK(session.state() == lc::snip::SnipSessionState::Idle);
 }
 
@@ -1286,7 +1290,7 @@ TEST_CASE("failed selection pin restores selecting without annotation context") 
     SessionRecovery recovery;
     lc::snip::SnapshotBatch batch(service, recovery, {});
     ControlledPreparation preparation;
-    lc::pin::CreatePin rejected = [](std::unique_ptr<lc::annotation::AnnotationDocument>& document, QPoint) {
+    lc::pin::CreatePin rejected = [](std::unique_ptr<lc::annotation::AnnotationDocument>& document, QRect) {
         return lc::pin::PinCreateResult{.rejectedDocument = std::move(document),
                                         .error = QStringLiteral("rejected")};
     };
@@ -1317,7 +1321,7 @@ TEST_CASE("throwing annotated pin callback restores the same document and histor
     SessionRecovery recovery;
     lc::snip::SnapshotBatch batch(service, recovery, {});
     ControlledPreparation preparation;
-    lc::pin::CreatePin throwing = [](std::unique_ptr<lc::annotation::AnnotationDocument>&, QPoint) -> lc::pin::PinCreateResult {
+    lc::pin::CreatePin throwing = [](std::unique_ptr<lc::annotation::AnnotationDocument>&, QRect) -> lc::pin::PinCreateResult {
         throw std::runtime_error("failure");
     };
     lc::snip::SnipSession session(batch, preparation.function(), {}, throwing);
@@ -1358,7 +1362,7 @@ TEST_CASE("selection pin suppresses duplicates and late preparation after cancel
     lc::snip::SnapshotBatch batch(service, recovery, {});
     ControlledPreparation preparation;
     int createCount{};
-    lc::pin::CreatePin captured = [&createCount](std::unique_ptr<lc::annotation::AnnotationDocument>& document, QPoint) {
+    lc::pin::CreatePin captured = [&createCount](std::unique_ptr<lc::annotation::AnnotationDocument>& document, QRect) {
         ++createCount;
         document.reset();
         return lc::pin::PinCreateResult{.id = 1};
@@ -1389,7 +1393,7 @@ TEST_CASE("selection pin display invalidation and null preparation restore selec
     lc::snip::SnapshotBatch batch(service, recovery, {});
     ControlledPreparation preparation;
     int createCount{};
-    lc::pin::CreatePin captured = [&createCount](std::unique_ptr<lc::annotation::AnnotationDocument>& document, QPoint) {
+    lc::pin::CreatePin captured = [&createCount](std::unique_ptr<lc::annotation::AnnotationDocument>& document, QRect) {
         ++createCount;
         document.reset();
         return lc::pin::PinCreateResult{.id = 1};
@@ -1435,8 +1439,8 @@ TEST_CASE("snip session production pin bridge leaves one visible managed window"
     lc::snip::SnipSession session(
         batch, preparation.function(), {},
         [&manager](std::unique_ptr<lc::annotation::AnnotationDocument>& document,
-                   const QPoint preferredTopLeft) {
-            return manager.create(std::move(document), preferredTopLeft);
+                   const QRect physicalSelection) {
+            return manager.create(std::move(document), physicalSelection);
         });
     lc::platform::windows::MonitorDescriptor monitor{};
     monitor.desktopRect = {0, 0, 20, 15};

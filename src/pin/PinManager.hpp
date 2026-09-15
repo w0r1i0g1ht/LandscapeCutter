@@ -11,18 +11,18 @@
 #include <unordered_map>
 
 namespace lc::pin {
-using AvailablePinGeometries = std::function<QList<QRect>()>;
+using AvailablePinScreens = std::function<QList<PinScreenGeometry>()>;
 
 class PinManager final : public QObject {
     Q_OBJECT
 
   public:
     explicit PinManager(CreatePinWindow factory = {}, ChoosePinSavePath savePathChooser = {},
-                        AvailablePinGeometries availableGeometries = {}, QObject* parent = nullptr);
+                        AvailablePinScreens availableScreens = {}, QObject* parent = nullptr);
     ~PinManager() override;
 
     PinCreateResult create(std::unique_ptr<annotation::AnnotationDocument> document,
-                           QPoint preferredTopLeft);
+                           QRect physicalSelection);
     void close(PinId id);
     void closeAll();
     void recoverVisibility(const QList<QRect>& availableGeometries);
@@ -38,7 +38,7 @@ class PinManager final : public QObject {
     void emitCountChanged();
 
     CreatePinWindow factory_;
-    AvailablePinGeometries availableGeometries_;
+    AvailablePinScreens availableScreens_;
     std::unordered_map<PinId, QPointer<PinWindow>> windows_;
     PinId nextId_{1};
 };

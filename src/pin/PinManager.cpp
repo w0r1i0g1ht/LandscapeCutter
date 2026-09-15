@@ -4,9 +4,9 @@
 
 namespace lc::pin {
 PinManager::PinManager(CreatePinWindow factory, ChoosePinSavePath savePathChooser,
-                       AvailablePinGeometries availableGeometries, QObject* parent)
+                       AvailablePinScreens availableScreens, QObject* parent)
     : QObject(parent), factory_(std::move(factory)),
-      availableGeometries_(std::move(availableGeometries)) {
+      availableScreens_(std::move(availableScreens)) {
     if (!factory_) {
         factory_ = [savePathChooser = std::move(savePathChooser)](const PinId id) {
             return new PinWindow(id, savePathChooser);
@@ -31,7 +31,7 @@ PinManager::~PinManager() {
 }
 
 PinCreateResult PinManager::create(std::unique_ptr<annotation::AnnotationDocument> document,
-                                   const QPoint preferredTopLeft) {
+                                   const QRect physicalSelection) {
     if (!document || document->snapshot().base.isNull()) {
         return {.rejectedDocument = std::move(document), .error = tr("无法创建贴图：图片为空。")};
     }
@@ -40,18 +40,28 @@ PinCreateResult PinManager::create(std::unique_ptr<annotation::AnnotationDocumen
     if (window == nullptr) {
         return {.rejectedDocument = std::move(document), .error = tr("无法创建贴图窗口。")};
     }
-    const QString error = window->attachDocument(document, preferredTopLeft);
+    QList<PinScreenGeometry> screens;
+    if (availableScreens_) {
+        try {
+            screens = availableScreens_();
+        } catch (...) {
+            // Screen discovery is best effort; the unscaled fallback remains usable.
+        }
+    }
+    const auto initialRect =
+        initialPinWindowRect(physicalSelection, document->snapshot().base.size(), screens);
+    const QString error = window->attachDocument(document, initialRect);
     if (!error.isEmpty()) {
         delete window;
         return {.rejectedDocument = std::move(document), .error = error};
     }
-    if (availableGeometries_) {
-        try {
-            window->recoverVisibility(availableGeometries_());
-        } catch (...) {
-            // Visibility recovery is best effort and must not roll back an attached document.
-        }
+    QList<QRect> availableGeometries;
+    availableGeometries.reserve(screens.size());
+    for (const auto& screen : screens) {
+        if (!screen.availableLogicalGeometry.isEmpty())
+            availableGeometries.push_back(screen.availableLogicalGeometry);
     }
+    window->recoverVisibility(availableGeometries);
 
     windows_.emplace(id, window);
     connect(window, &PinWindow::closed, this, [this](const PinId closedId) { remove(closedId); });

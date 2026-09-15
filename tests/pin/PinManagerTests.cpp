@@ -29,7 +29,7 @@ TEST_CASE("pin manager returns the document when window creation fails") {
     auto document = makeDocument();
     auto* original = document.get();
 
-    auto result = manager.create(std::move(document), {10, 10});
+    auto result = manager.create(std::move(document), {10, 10, 40, 20});
 
     CHECK_FALSE(result.id.has_value());
     CHECK(result.rejectedDocument.get() == original);
@@ -59,8 +59,8 @@ TEST_CASE("pin manager keeps several windows independent and ids increase") {
     auto& application = annotationTestApplication();
     Q_UNUSED(application);
     PinManager manager;
-    const auto first = manager.create(makeDocument({40, 20}), {0, 0});
-    const auto second = manager.create(makeDocument({60, 30}), {100, 0});
+    const auto first = manager.create(makeDocument({40, 20}), {0, 0, 40, 20});
+    const auto second = manager.create(makeDocument({60, 30}), {100, 0, 60, 30});
     REQUIRE(first.id.has_value());
     REQUIRE(second.id.has_value());
     CHECK(*first.id != 0);
@@ -99,8 +99,8 @@ TEST_CASE("pin manager forwards pin errors and recovers only hidden windows") {
     auto& application = annotationTestApplication();
     Q_UNUSED(application);
     PinManager manager;
-    const auto hidden = manager.create(makeDocument({40, 20}), {-900, 20});
-    const auto visible = manager.create(makeDocument({40, 20}), {10, 20});
+    const auto hidden = manager.create(makeDocument({40, 20}), {-900, 20, 40, 20});
+    const auto visible = manager.create(makeDocument({40, 20}), {10, 20, 40, 20});
     REQUIRE(hidden.id.has_value());
     REQUIRE(visible.id.has_value());
     auto* hiddenWindow = manager.window(*hidden.id);
@@ -119,18 +119,39 @@ TEST_CASE("pin manager forwards pin errors and recovers only hidden windows") {
     CHECK(error == QStringLiteral("save failed"));
 }
 
-TEST_CASE("pin manager makes a newly created offscreen pin immediately visible") {
+TEST_CASE("pin manager creates a high dpi pin at the selection's logical rectangle") {
     auto& application = annotationTestApplication();
     Q_UNUSED(application);
-    PinManager manager({}, {}, [] { return QList<QRect>{{0, 0, 1600, 1000}}; });
+    PinManager manager({}, {}, [] {
+        return QList<lc::pin::PinScreenGeometry>{
+            {{0, 0, 3200, 2000}, {0, 0, 1600, 1000}, {0, 0, 1600, 960}}};
+    });
 
-    const auto result = manager.create(makeDocument({800, 500}), {2400, 1400});
+    const auto result =
+        manager.create(makeDocument({1000, 600}), {800, 400, 1000, 600});
 
     REQUIRE(result.id.has_value());
     auto* window = manager.window(*result.id);
     REQUIRE(window != nullptr);
     CHECK(window->isVisible());
-    CHECK(QRect{0, 0, 1600, 1000}.intersects(window->geometry()));
+    CHECK(window->geometry() == QRect(400, 200, 500, 300));
+}
+
+TEST_CASE("pin manager still recovers a newly created pin outside known screens") {
+    auto& application = annotationTestApplication();
+    Q_UNUSED(application);
+    PinManager manager({}, {}, [] {
+        return QList<lc::pin::PinScreenGeometry>{
+            {{0, 0, 1600, 1000}, {0, 0, 1600, 1000}, {0, 0, 1600, 960}}};
+    });
+
+    const auto result = manager.create(makeDocument({800, 500}), {2400, 1400, 800, 500});
+
+    REQUIRE(result.id.has_value());
+    auto* window = manager.window(*result.id);
+    REQUIRE(window != nullptr);
+    CHECK(window->isVisible());
+    CHECK(QRect{0, 0, 1600, 960}.intersects(window->geometry()));
 }
 
 TEST_CASE("pin manager destruction leaves no managed top level window") {

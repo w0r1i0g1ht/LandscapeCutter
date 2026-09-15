@@ -7,7 +7,30 @@
 
 namespace {
 using Catch::Approx;
+using lc::pin::initialPinWindowRect;
 using lc::pin::PinGeometryModel;
+using lc::pin::PinScreenGeometry;
+
+TEST_CASE("initial pin window maps physical selection into logical screen coordinates") {
+    const QList<PinScreenGeometry> screens{
+        {{0, 0, 3200, 2000}, {0, 0, 1600, 1000}, {0, 0, 1600, 960}}};
+
+    const auto window = initialPinWindowRect({800, 400, 1000, 600}, {1000, 600}, screens);
+
+    CHECK(window == QRect(400, 200, 500, 300));
+}
+
+TEST_CASE("initial pin window uses the containing screen in a negative mixed dpi layout") {
+    const QList<PinScreenGeometry> screens{
+        {{0, 0, 3840, 2160}, {0, 0, 2560, 1440}, {0, 0, 2560, 1400}},
+        {{-3200, -1000, 3200, 2000}, {-3200, -500, 1600, 1000},
+         {-3200, -500, 1600, 960}}};
+
+    const auto window =
+        initialPinWindowRect({-2800, -600, 1000, 600}, {1000, 600}, screens);
+
+    CHECK(window == QRect(-3000, -300, 500, 300));
+}
 
 TEST_CASE("pin geometry zoom keeps the cursor anchored") {
     PinGeometryModel model({400, 200}, {100, 100, 400, 200});
@@ -37,12 +60,16 @@ TEST_CASE("pin geometry opacity uses five-percent steps and clamps") {
     CHECK(model.opacity() == Approx(0.95));
 }
 
-TEST_CASE("pin geometry restores original pixels without moving the top-left") {
-    PinGeometryModel model({400, 200}, {30, 40, 800, 400});
+TEST_CASE("pin geometry restores its initial logical size without moving the top-left") {
+    PinGeometryModel model({800, 500}, {30, 40, 400, 250});
+
+    model.zoomAt({230, 165}, 120);
+    const auto zoomedTopLeft = model.windowRect().topLeft();
 
     model.resetSize();
 
-    CHECK(model.windowRect() == QRect(30, 40, 400, 200));
+    CHECK(model.windowRect().topLeft() == zoomedTopLeft);
+    CHECK(model.windowRect().size() == QSize(400, 250));
 }
 
 TEST_CASE("pin recovery moves only a completely hidden window") {

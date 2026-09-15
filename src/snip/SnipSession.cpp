@@ -283,7 +283,7 @@ void SnipSession::createPin(std::unique_ptr<annotation::AnnotationDocument> docu
         return;
     pin::PinCreateResult result;
     try {
-        result = createPin_(document, lockedSelection_.topLeft());
+        result = createPin_(document, lockedSelection_);
     } catch (...) {
         result.rejectedDocument = std::move(document);
         result.error = QStringLiteral("创建贴图失败。");

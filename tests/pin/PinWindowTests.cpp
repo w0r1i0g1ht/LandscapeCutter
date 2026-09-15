@@ -60,6 +60,12 @@ std::unique_ptr<AnnotationDocument> makeDocument(QSize size = {100, 50}) {
     return std::make_unique<AnnotationDocument>(image);
 }
 
+QString attachAt(PinWindow& window, std::unique_ptr<AnnotationDocument>& document,
+                 const QPoint topLeft = {}) {
+    const auto size = document ? document->snapshot().base.size() : QSize{};
+    return window.attachDocument(document, QRect(topLeft, size));
+}
+
 void sendWheel(PinWindow& window, QPoint local, int delta, Qt::KeyboardModifiers modifiers) {
     const QPoint global = window.mapToGlobal(local);
     QWheelEvent event(QPointF(local), QPointF(global), {}, {0, delta}, Qt::NoButton, modifiers,
@@ -80,7 +86,7 @@ TEST_CASE("pin window starts frameless topmost and owns its document") {
     auto document = makeDocument({80, 40});
     auto* original = document.get();
 
-    const auto error = window->attachDocument(document, {20, 30});
+    const auto error = attachAt(*window, document, {20, 30});
 
     CHECK(error.isEmpty());
     CHECK(document == nullptr);
@@ -97,7 +103,7 @@ TEST_CASE("pin window wheel routes zoom and opacity separately") {
     Q_UNUSED(application);
     auto window = std::make_unique<PinWindow>(2);
     auto document = makeDocument();
-    REQUIRE(window->attachDocument(document, {0, 0}).isEmpty());
+    REQUIRE(attachAt(*window, document, {0, 0}).isEmpty());
 
     sendWheel(*window, {50, 25}, 120, Qt::NoModifier);
     CHECK(window->size() == QSize(110, 55));
@@ -113,7 +119,7 @@ TEST_CASE("pin window dragging does not move while editing") {
     Q_UNUSED(application);
     auto window = std::make_unique<PinWindow>(3);
     auto document = makeDocument();
-    REQUIRE(window->attachDocument(document, {40, 50}).isEmpty());
+    REQUIRE(attachAt(*window, document, {40, 50}).isEmpty());
     QCoreApplication::processEvents();
     window->enterEditing();
     const QPointF local{10, 10};
@@ -136,7 +142,7 @@ TEST_CASE("pin window double click enters editing and shows the shared toolbar")
     Q_UNUSED(application);
     auto window = std::make_unique<PinWindow>(4);
     auto document = makeDocument();
-    REQUIRE(window->attachDocument(document, {0, 0}).isEmpty());
+    REQUIRE(attachAt(*window, document, {0, 0}).isEmpty());
     QMouseEvent doubleClick{QEvent::MouseButtonDblClick, QPointF{20, 20}, QPointF{20, 20},
                             Qt::LeftButton, Qt::LeftButton, Qt::NoModifier};
 
@@ -155,7 +161,7 @@ TEST_CASE("pin window editing keeps history and returns to viewing on done") {
     auto document = makeDocument({100, 60});
     REQUIRE(document->addObject(lc::annotation::RectangleAnnotation{{5, 5, 20, 10}, {Qt::red, 3}})
                 .has_value());
-    REQUIRE(window->attachDocument(document, {}).isEmpty());
+    REQUIRE(attachAt(*window, document).isEmpty());
     window->enterEditing();
     REQUIRE(window->document()->undo());
     CHECK(window->document()->objects().empty());
@@ -168,7 +174,7 @@ TEST_CASE("pin window commits nonempty text and keeps it editable") {
     Q_UNUSED(application);
     auto window = std::make_unique<PinWindow>(6);
     auto document = makeDocument({120, 80});
-    REQUIRE(window->attachDocument(document, {}).isEmpty());
+    REQUIRE(attachAt(*window, document).isEmpty());
     window->enterEditing();
     auto* text = window->findChild<QToolButton*>("textToolButton");
     REQUIRE(text != nullptr);
@@ -191,7 +197,7 @@ TEST_CASE("pin window routes rectangle selection history and delete while editin
     Q_UNUSED(application);
     auto window = std::make_unique<PinWindow>(7);
     auto document = makeDocument({120, 80});
-    REQUIRE(window->attachDocument(document, {}).isEmpty());
+    REQUIRE(attachAt(*window, document).isEmpty());
     window->enterEditing();
     auto* rectangle = window->findChild<QToolButton*>("rectangleToolButton");
     REQUIRE(rectangle != nullptr);
@@ -237,7 +243,7 @@ TEST_CASE("pin window text double click edits text and blank double click finish
     auto document = makeDocument({120, 80});
     REQUIRE(document->addObject(lc::annotation::TextAnnotation{{10, 10}, "text", {Qt::red, 24}})
                 .has_value());
-    REQUIRE(window->attachDocument(document, {}).isEmpty());
+    REQUIRE(attachAt(*window, document).isEmpty());
     window->enterEditing();
     sendMouse(*window, QEvent::MouseButtonDblClick, {12, 12}, {12, 12}, Qt::LeftButton,
               Qt::LeftButton);
@@ -256,7 +262,7 @@ TEST_CASE("pin window non-text double click stays editing without creating text"
     auto document = makeDocument();
     REQUIRE(document->addObject(lc::annotation::RectangleAnnotation{{5, 5, 30, 20}, {Qt::red, 3}})
                 .has_value());
-    REQUIRE(window->attachDocument(document, {}).isEmpty());
+    REQUIRE(attachAt(*window, document).isEmpty());
     window->enterEditing();
     sendMouse(*window, QEvent::MouseButtonDblClick, {10, 10}, {10, 10}, Qt::LeftButton,
               Qt::LeftButton);
@@ -270,7 +276,7 @@ TEST_CASE("pin window empty text is discarded and actions emit host signals") {
     auto window = std::make_unique<PinWindow>(
         10, [](auto, auto onCancel) { onCancel(); });
     auto document = makeDocument();
-    REQUIRE(window->attachDocument(document, {}).isEmpty());
+    REQUIRE(attachAt(*window, document).isEmpty());
     window->enterEditing();
     auto* text = window->findChild<QToolButton*>("textToolButton");
     REQUIRE(text != nullptr);
@@ -356,10 +362,10 @@ TEST_CASE("pin window attach rejection preserves the caller document") {
     Q_UNUSED(application);
     auto window = std::make_unique<PinWindow>(11);
     auto first = makeDocument();
-    REQUIRE(window->attachDocument(first, {}).isEmpty());
+    REQUIRE(attachAt(*window, first).isEmpty());
     auto rejected = makeDocument();
     auto* original = rejected.get();
-    CHECK_FALSE(window->attachDocument(rejected, {}).isEmpty());
+    CHECK_FALSE(attachAt(*window, rejected).isEmpty());
     CHECK(rejected.get() == original);
 }
 
@@ -369,7 +375,7 @@ TEST_CASE("pin copy exports current annotations and stays open") {
     auto document = makeDocument({80, 40});
     REQUIRE(document->addObject(lc::annotation::RectangleAnnotation{{5, 5, 20, 10}, {Qt::red, 3}})
                 .has_value());
-    REQUIRE(window->attachDocument(document, {}).isEmpty());
+    REQUIRE(attachAt(*window, document).isEmpty());
     const auto expected = lc::annotation::composeAnnotations(window->document()->snapshot());
     auto* copy = window->findChild<QAction*>("pinCopyAction");
     REQUIRE(copy != nullptr);
@@ -388,7 +394,7 @@ TEST_CASE("pin save cancellation restores the exact editing mode") {
     auto document = makeDocument();
     REQUIRE(document->addObject(lc::annotation::RectangleAnnotation{{5, 5, 20, 10}, {Qt::red, 3}})
                 .has_value());
-    REQUIRE(window->attachDocument(document, {}).isEmpty());
+    REQUIRE(attachAt(*window, document).isEmpty());
     window->enterEditing();
     auto* save = window->findChild<QAction*>("pinSaveAction");
     REQUIRE(save != nullptr);
@@ -410,7 +416,7 @@ TEST_CASE("pin save writes PNG and JPEG without changing history") {
     auto document = makeDocument({80, 40});
     REQUIRE(document->addObject(lc::annotation::RectangleAnnotation{{5, 5, 40, 20}, {Qt::red, 3}})
                 .has_value());
-    REQUIRE(window->attachDocument(document, {}).isEmpty());
+    REQUIRE(attachAt(*window, document).isEmpty());
     const auto expected = lc::annotation::composeAnnotations(window->document()->snapshot());
     const bool hadUndo = window->document()->canUndo();
     auto* save = window->findChild<QAction*>("pinSaveAction");
@@ -448,7 +454,7 @@ TEST_CASE("pin save failure returns to viewing and retains the document") {
     auto document = makeDocument();
     REQUIRE(document->addObject(lc::annotation::RectangleAnnotation{{5, 5, 20, 10}, {Qt::red, 3}})
                 .has_value());
-    REQUIRE(window->attachDocument(document, {}).isEmpty());
+    REQUIRE(attachAt(*window, document).isEmpty());
     auto* save = window->findChild<QAction*>("pinSaveAction");
     REQUIRE(save != nullptr);
     QString error;
@@ -469,7 +475,7 @@ TEST_CASE("pin close cancels queued clipboard completion before destruction") {
 
     auto* window = new PinWindow(16);
     auto document = makeDocument({1024, 1024});
-    REQUIRE(window->attachDocument(document, {}).isEmpty());
+    REQUIRE(attachAt(*window, document).isEmpty());
     auto* copy = window->findChild<QAction*>("pinCopyAction");
     REQUIRE(copy != nullptr);
     copy->trigger();
@@ -487,7 +493,7 @@ TEST_CASE("pin window escape cancels a draft before it leaves editing") {
     Q_UNUSED(application);
     auto window = std::make_unique<PinWindow>(7);
     auto document = makeDocument();
-    REQUIRE(window->attachDocument(document, {}).isEmpty());
+    REQUIRE(attachAt(*window, document).isEmpty());
     window->enterEditing();
     auto* rectangle = window->findChild<QToolButton*>("rectangleToolButton");
     REQUIRE(rectangle != nullptr);
@@ -508,7 +514,7 @@ TEST_CASE("pin window emits its closed id exactly once") {
     Q_UNUSED(application);
     auto* window = new PinWindow(8);
     auto document = makeDocument();
-    REQUIRE(window->attachDocument(document, {}).isEmpty());
+    REQUIRE(attachAt(*window, document).isEmpty());
     int closedCount{};
     lc::pin::PinId closedId{};
     QObject::connect(window, &PinWindow::closed, [&closedCount, &closedId](const auto id) {
