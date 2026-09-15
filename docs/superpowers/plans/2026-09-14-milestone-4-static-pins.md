@@ -798,7 +798,7 @@ git commit -m "feat: integrate static pins with the app"
 - Consumes: the completed Tasks 1–7 and their targeted test evidence.
 - Produces: an auditable milestone status that distinguishes automatic offscreen validation from deferred real-desktop/GPU validation.
 
-- [ ] **Step 1: Inspect the exact safe test inventory**
+- [x] **Step 1: Inspect the exact safe test inventory**
 
 ```powershell
 ctest --test-dir out/build/windows-msvc-debug -C Debug -N -R "annotation|pin|snip session|overlay|app controller|snapshot image"
@@ -806,7 +806,7 @@ ctest --test-dir out/build/windows-msvc-debug -C Debug -N -R "annotation|pin|sni
 
 Read every listed test name. If any case comes from `landscapecutter_graphics_tests`, `landscapecutter_capture_tests` or `landscapecutter_desktop_capture_tests`, narrow the regular expression before execution.
 
-- [ ] **Step 2: Build only required targets**
+- [x] **Step 2: Build only required targets**
 
 ```powershell
 cmake --build --preset windows-msvc-debug --target landscapecutter_annotation_tests landscapecutter_pin_tests landscapecutter_app_controller_tests landscapecutter_unit_tests LandscapeCutter
@@ -814,7 +814,7 @@ cmake --build --preset windows-msvc-debug --target landscapecutter_annotation_te
 
 Expected: MSBuild exits 0. This is a compile/link check and must not start the product.
 
-- [ ] **Step 3: Run the reviewed safe test set once**
+- [x] **Step 3: Run the reviewed safe test set once**
 
 ```powershell
 ctest --test-dir out/build/windows-msvc-debug -C Debug --output-on-failure -R "annotation|pin|snip session|overlay|app controller|snapshot image"
@@ -822,7 +822,7 @@ ctest --test-dir out/build/windows-msvc-debug -C Debug --output-on-failure -R "a
 
 Expected: all reviewed cases pass. Do not broaden, repeat, or invoke either preset after success.
 
-- [ ] **Step 4: Review milestone requirements against the spec**
+- [x] **Step 4: Review milestone requirements against the spec**
 
 Check each item in spec section 10 against tests and code. Record any deferred real-desktop item without claiming it passed. Inspect:
 
@@ -834,17 +834,17 @@ git log --oneline main..HEAD
 
 Expected: no whitespace errors, no uncommitted implementation, and one ordered commit per completed task.
 
-- [ ] **Step 5: Update public and progress documentation**
+- [x] **Step 5: Update public and progress documentation**
 
 Create the progress document with task commits, selected test counts, build evidence, manual-test deferral and the `0x10E` safety boundary. Update README to describe the new Pin button, normal/editing gestures, tray close-all action and manual-validation status. Mark Milestone 4 complete only after every non-deferred exit condition has evidence; otherwise state the exact remaining condition.
 
-- [ ] **Step 6: Commit documentation**
+- [x] **Step 6: Commit documentation**
 
 ```powershell
 git add README.md docs/superpowers/progress/2026-09-14-milestone-4-progress.md docs/superpowers/plans/2026-09-14-milestone-4-static-pins.md
 git commit -m "docs: record milestone 4 verification"
 ```
 
-- [ ] **Step 7: Stop before merge or push**
+- [x] **Step 7: Stop before merge or push**
 
 Report the branch, worktree, commit list, safe build/test evidence, deferred real-desktop validation and remaining risks. Do not merge or push until the user explicitly requests integration after reviewing the result.
