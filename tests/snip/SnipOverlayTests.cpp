@@ -896,4 +896,27 @@ TEST_CASE("annotation toolbar pin commits pending text before requesting a pin")
     CHECK(requests == 1);
     CHECK(overlay.findChild<QPlainTextEdit*>("annotationTextEditor") == nullptr);
 }
+
+TEST_CASE("annotation toolbar pin discards empty pending text and requests once") {
+    ApplicationFixture fixture;
+    SelectionModel selection;
+    selection.setBounds({0, 0, 80, 40});
+    auto document = annotationDocument({80, 40});
+    AnnotationInteraction interaction(document);
+    interaction.setTool(AnnotationTool::Text);
+    QImage image({80, 40}, QImage::Format_RGB32);
+    image.fill(Qt::white);
+    SnipOverlay overlay{{{0, 0, 80, 40}, image}, selection};
+    overlay.setToolbarHost(true);
+    overlay.setAnnotationContext(&document, &interaction, {0, 0, 80, 40});
+    overlay.createTextEditor({4, 4});
+    auto* pin = overlay.findChild<QToolButton*>("pinButton");
+    REQUIRE(pin != nullptr);
+    int requests{};
+    QObject::connect(&overlay, &SnipOverlay::pinRequested, [&] { ++requests; });
+    pin->click();
+    CHECK(requests == 1);
+    CHECK(document.objects().empty());
+    CHECK(overlay.findChild<QPlainTextEdit*>("annotationTextEditor") == nullptr);
+}
 } // namespace

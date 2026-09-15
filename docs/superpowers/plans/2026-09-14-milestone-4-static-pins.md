@@ -599,7 +599,7 @@ git commit -m "feat: manage multiple static pins"
 - Consumes: SnipOverlay `pinRequested`, existing `PrepareAnnotation`, and a testable `CreatePin` callback.
 - Produces: selection-to-pin preparation, annotated-document transfer, exact failure restoration, and stale-request rejection.
 
-- [ ] **Step 1: Write failing annotated-transfer tests**
+- [x] **Step 1: Write failing annotated-transfer tests**
 
 ```cpp
 TEST_CASE("annotated pin transfers document and history then closes the snip session") {
@@ -623,7 +623,7 @@ TEST_CASE("annotated pin transfers document and history then closes the snip ses
 
 Add failure returning the same document, tool/style/block-size restoration, pending text commit before transfer, empty text omission, active draft cancellation, duplicate request suppression, and callback exceptions converting to a retryable error.
 
-- [ ] **Step 2: Write failing direct-selection and stale-completion tests**
+- [x] **Step 2: Write failing direct-selection and stale-completion tests**
 
 ```cpp
 TEST_CASE("direct selection pin prepares one owned RGB32 document") {
@@ -646,6 +646,10 @@ Cover empty preparation restoring Selecting, cancellation ignoring late completi
 
 - [ ] **Step 3: Verify RED using only app-controller tests**
 
+> Audit note: the Task 6 transfer and stale-completion tests were written before the
+> implementation, but the complete historical RED output was not retained. This step
+> remains unchecked rather than being reconstructed after the fact.
+
 ```powershell
 cmake --build --preset windows-msvc-debug --target landscapecutter_app_controller_tests
 ctest --test-dir out/build/windows-msvc-debug -C Debug --output-on-failure -R "snip session.*pin|overlay.*pin"
@@ -653,13 +657,13 @@ ctest --test-dir out/build/windows-msvc-debug -C Debug --output-on-failure -R "s
 
 Expected: compilation or assertions fail because pin session APIs and states are absent.
 
-- [ ] **Step 4: Implement the pin state machine**
+- [x] **Step 4: Implement the pin state machine**
 
 Add:
 
 ```cpp
 using CreatePin = std::function<pin::PinCreateResult(
-    std::unique_ptr<annotation::AnnotationDocument>, QPoint preferredTopLeft)>;
+    std::unique_ptr<annotation::AnnotationDocument>&, QPoint preferredTopLeft)>;
 
 enum class SnipSessionState {
     Idle, PreparingCapture, Selecting, PreparingAnnotation, Annotating,
@@ -672,11 +676,15 @@ void SnipSession::pin();
 
 Add a constructor overload accepting `PrepareAnnotation`, `ChooseSavePath` and `CreatePin`; existing overloads delegate with an empty callback. Connect every overlay's `pinRequested` to `SnipSession::pin`.
 
+The callback receives the document by reference so it consumes ownership only after
+successful pin creation. This preserves the exact document when the callback rejects
+the request or throws before consuming it.
+
 For Selecting, lock the exact selection, enter `PreparingPinFromSelection` and call the existing preparation boundary with a distinct request ID. For Annotating, snapshot current interaction tool/style/block size, cancel draft, clear selection, destroy the referencing interaction, enter `CreatingPin`, and invoke `CreatePin` on the GUI thread.
 
 On success, destroy overlays and frozen images and return Idle. On failure, recover `rejectedDocument`, rebuild `AnnotationInteraction`, restore tool/style/block size, refresh all overlays, return to the precise source state and emit the returned error. Cancel, display invalidation and destruction invalidate late preparation completions.
 
-- [ ] **Step 5: Run safe session, overlay, and preparation tests**
+- [x] **Step 5: Run safe session, overlay, and preparation tests**
 
 ```powershell
 cmake --build --preset windows-msvc-debug --target landscapecutter_app_controller_tests landscapecutter_annotation_tests
@@ -685,7 +693,7 @@ ctest --test-dir out/build/windows-msvc-debug -C Debug --output-on-failure -R "s
 
 Expected: all selected cases pass. Use `ctest -N -R` first to confirm selection excludes every graphics/capture/desktop test.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```powershell
 git add src/snip/SnipSession.* src/snip/SnipOverlay.* src/pin/PinTypes.hpp tests/snip/SnipSessionTests.cpp tests/snip/SnipOverlayTests.cpp

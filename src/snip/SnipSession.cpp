@@ -33,6 +33,11 @@ SnipSession::SnipSession(SnapshotBatch& batch, PrepareAnnotation preparation,
     : SnipSession(batch, std::move(preparation), parent) {
     savePathChooser_ = std::move(savePathChooser);
 }
+SnipSession::SnipSession(SnapshotBatch& batch, PrepareAnnotation preparation,
+                         ChooseSavePath savePathChooser, pin::CreatePin createPin, QObject* parent)
+    : SnipSession(batch, std::move(preparation), std::move(savePathChooser), parent) {
+    createPin_ = std::move(createPin);
+}
 SnipSession::~SnipSession() {
     cancel();
     workers_.waitForDone();
@@ -121,6 +126,7 @@ void SnipSession::open(std::vector<FrozenMonitor> images) {
         });
         connect(overlay.get(), &SnipOverlay::copyRequested, this, &SnipSession::copy);
         connect(overlay.get(), &SnipOverlay::saveRequested, this, &SnipSession::save);
+        connect(overlay.get(), &SnipOverlay::pinRequested, this, &SnipSession::pin);
         connect(overlay.get(), &SnipOverlay::cancelRequested, this, &SnipSession::cancel);
         connect(overlay.get(), &SnipOverlay::annotationToolRequested, this,
                 [this](annotation::AnnotationTool tool) {
@@ -219,6 +225,115 @@ void SnipSession::save() {
         return;
     }
     chooseSavePath();
+}
+
+void SnipSession::pin() {
+    if (!active_ || busy_ || !createPin_)
+        return;
+    if (state_ == SnipSessionState::Selecting && !selection_.rect().isEmpty()) {
+        preparePinFromSelection();
+        return;
+    }
+    if (state_ != SnipSessionState::Annotating || !document_ || !interaction_)
+        return;
+    const auto tool = interaction_->tool();
+    const auto style = interaction_->style();
+    const auto blockSize = interaction_->mosaicBlockSize();
+    setBusy(true);
+    interaction_->cancelDraft();
+    document_->clearSelection();
+    for (auto& overlay : overlays_)
+        overlay->clearAnnotationContext();
+    interaction_.reset();
+    state_ = SnipSessionState::CreatingPin;
+    createPin(std::move(document_), SnipSessionState::Annotating, tool, style, blockSize);
+}
+
+void SnipSession::preparePinFromSelection() {
+    const auto sessionRequestId = id_;
+    const auto preparationRequestId = ++annotationPreparationId_;
+    lockedSelection_ = selection_.rect();
+    const auto images = images_;
+    const auto cancellation = cancellation_;
+    state_ = SnipSessionState::PreparingPinFromSelection;
+    setBusy(true);
+    const QPointer<SnipSession> session(this);
+    const auto complete = [session, sessionRequestId, preparationRequestId](QImage image) {
+        if (!session)
+            return;
+        QMetaObject::invokeMethod(session, [session, sessionRequestId, preparationRequestId,
+                                             image = std::move(image)]() mutable {
+            if (session)
+                session->annotationPrepared(sessionRequestId, preparationRequestId, std::move(image));
+        }, Qt::QueuedConnection);
+    };
+    if (preparation_) {
+        try { preparation_(images, lockedSelection_, cancellation, complete); } catch (...) { complete({}); }
+    } else {
+        workers_.start([images, selection = lockedSelection_, cancellation, complete] {
+            try { prepareAnnotation(images, selection, cancellation, complete); } catch (...) { complete({}); }
+        });
+    }
+}
+
+void SnipSession::createPin(std::unique_ptr<annotation::AnnotationDocument> document,
+                            const SnipSessionState sourceState, const annotation::AnnotationTool tool,
+                            const annotation::AnnotationStyle style, const int mosaicBlockSize) {
+    if (!active_ || !document)
+        return;
+    pin::PinCreateResult result;
+    try {
+        result = createPin_(document, lockedSelection_.topLeft());
+    } catch (...) {
+        result.rejectedDocument = std::move(document);
+        result.error = QStringLiteral("创建贴图失败。");
+    }
+    if (result.id.has_value()) {
+        completePinSuccess();
+        return;
+    }
+    if (!result.rejectedDocument)
+        result.rejectedDocument = std::move(document);
+    const QString error = result.error.isEmpty() ? QStringLiteral("创建贴图失败。") : result.error;
+    if (sourceState == SnipSessionState::Selecting) {
+        interaction_.reset();
+        document_.reset();
+        state_ = SnipSessionState::Selecting;
+        setBusy(false);
+        for (auto& overlay : overlays_)
+            overlay->clearAnnotationContext();
+        emit errorOccurred(error);
+        return;
+    }
+    document_ = std::move(result.rejectedDocument);
+    if (!document_) {
+        emit errorOccurred(error);
+        cancel();
+        return;
+    }
+    interaction_ = std::make_unique<annotation::AnnotationInteraction>(*document_);
+    interaction_->setTool(tool);
+    interaction_->setStyle(style);
+    interaction_->setMosaicBlockSize(mosaicBlockSize);
+    state_ = sourceState;
+    setBusy(false);
+    for (auto& overlay : overlays_)
+        overlay->setAnnotationContext(document_.get(), interaction_.get(), lockedSelection_);
+    emit errorOccurred(error);
+}
+
+void SnipSession::completePinSuccess() {
+    active_ = false;
+    busy_ = false;
+    preparing_ = false;
+    state_ = SnipSessionState::Idle;
+    ++id_;
+    invalidateAnnotationPreparation();
+    destroyOverlaysDeferred();
+    images_.clear();
+    selection_.clear();
+    interaction_.reset();
+    document_.reset();
 }
 
 void SnipSession::chooseSavePath() {
@@ -375,7 +490,7 @@ void SnipSession::beginAnnotation(annotation::AnnotationTool tool) {
 void SnipSession::annotationPrepared(std::uint64_t sessionRequestId,
                                      std::uint64_t preparationRequestId, QImage image) {
     if (!active_ || sessionRequestId != id_ || preparationRequestId != annotationPreparationId_ ||
-        state_ != SnipSessionState::PreparingAnnotation ||
+        (state_ != SnipSessionState::PreparingAnnotation && state_ != SnipSessionState::PreparingPinFromSelection) ||
         !cancellation_ || cancellation_->load(std::memory_order_acquire))
         return;
     if (image.isNull()) {
@@ -386,6 +501,13 @@ void SnipSession::annotationPrepared(std::uint64_t sessionRequestId,
         return;
     }
     document_ = std::make_unique<annotation::AnnotationDocument>(std::move(image));
+    if (state_ == SnipSessionState::PreparingPinFromSelection) {
+        invalidateAnnotationPreparation(false);
+        selection_.release();
+        state_ = SnipSessionState::CreatingPin;
+        createPin(std::move(document_), SnipSessionState::Selecting);
+        return;
+    }
     interaction_ = std::make_unique<annotation::AnnotationInteraction>(*document_);
     interaction_->setTool(tool_);
     invalidateAnnotationPreparation(false);

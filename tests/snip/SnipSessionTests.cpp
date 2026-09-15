@@ -13,6 +13,7 @@
 #include <algorithm>
 #include <catch2/catch_test_macros.hpp>
 #include <functional>
+#include <stdexcept>
 namespace {
 struct SessionService : lc::capture::IMonitorCaptureService {
     void captureOnce(lc::capture::MonitorCaptureRequest, lc::capture::CaptureCompletion) override {}
@@ -57,6 +58,16 @@ struct ControlledSavePathChooser {
 
     std::function<void(QString)> accept;
     std::function<void()> reject;
+};
+
+struct CapturedPin {
+    lc::pin::CreatePin callback() {
+        return [this](std::unique_ptr<lc::annotation::AnnotationDocument>& document, QPoint) {
+            captured = std::move(document);
+            return lc::pin::PinCreateResult{.id = 1};
+        };
+    }
+    std::unique_ptr<lc::annotation::AnnotationDocument> captured;
 };
 
 QImage annotationTestImage() {
@@ -1199,4 +1210,213 @@ TEST_CASE("a rapid second begin request is ignored while a snip session is activ
     CHECK(session.state() == lc::snip::SnipSessionState::Selecting);
     CHECK(session.overlayCount() == 1);
     session.cancel();
+}
+
+TEST_CASE("snip session pins a prepared selection as one RGB32 document") {
+    int argc = 1;
+    char name[] = "pin-selection-test";
+    char* argv[] = {name, nullptr};
+    QApplication app(argc, argv);
+    SessionService service;
+    SessionRecovery recovery;
+    lc::snip::SnapshotBatch batch(service, recovery, {});
+    ControlledPreparation preparation;
+    ControlledSavePathChooser chooser;
+    CapturedPin captured;
+    lc::snip::SnipSession session(batch, preparation.function(), chooser.function(), captured.callback());
+    lc::platform::windows::MonitorDescriptor monitor{};
+    monitor.desktopRect = {0, 0, 20, 15};
+    monitor.catalogGeneration = 1;
+    session.begin({monitor});
+    batch.ready({{{0, 0, 20, 15}, annotationTestImage()}});
+    selectRect(session, {2, 3}, {12, 10});
+    session.pin();
+    CHECK(session.state() == lc::snip::SnipSessionState::PreparingPinFromSelection);
+    QImage prepared({10, 7}, QImage::Format_RGB32);
+    prepared.fill(Qt::red);
+    preparation.complete(prepared);
+    app.processEvents();
+    REQUIRE(captured.captured != nullptr);
+    CHECK(captured.captured->snapshot().base.size() == QSize(10, 7));
+    CHECK(captured.captured->snapshot().base.devicePixelRatio() == 1.0);
+    CHECK(session.state() == lc::snip::SnipSessionState::Idle);
+}
+
+TEST_CASE("snip session pin preserves annotated history") {
+    int argc = 1;
+    char name[] = "pin-annotation-test";
+    char* argv[] = {name, nullptr};
+    QApplication app(argc, argv);
+    SessionService service;
+    SessionRecovery recovery;
+    lc::snip::SnapshotBatch batch(service, recovery, {});
+    ControlledPreparation preparation;
+    ControlledSavePathChooser chooser;
+    CapturedPin captured;
+    lc::snip::SnipSession session(batch, preparation.function(), chooser.function(), captured.callback());
+    lc::platform::windows::MonitorDescriptor monitor{};
+    monitor.desktopRect = {0, 0, 20, 15};
+    monitor.catalogGeneration = 1;
+    session.begin({monitor});
+    batch.ready({{{0, 0, 20, 15}, annotationTestImage()}});
+    selectRect(session);
+    session.beginAnnotation(lc::annotation::AnnotationTool::Rectangle);
+    preparation.complete(annotationTestImage());
+    app.processEvents();
+    auto* original = session.document();
+    REQUIRE(original != nullptr);
+    REQUIRE(original->addObject(lc::annotation::RectangleAnnotation{{2, 2, 8, 6}, {Qt::red, 2}})
+                .has_value());
+    session.interaction()->press({15, 10});
+    session.pin();
+    CHECK(session.state() == lc::snip::SnipSessionState::Idle);
+    REQUIRE(captured.captured.get() == original);
+    CHECK(captured.captured->objects().size() == 1);
+    REQUIRE(captured.captured->undo());
+    CHECK(captured.captured->objects().empty());
+}
+
+TEST_CASE("failed selection pin restores selecting without annotation context") {
+    int argc = 1;
+    char name[] = "pin-selection-failure-test";
+    char* argv[] = {name, nullptr};
+    QApplication app(argc, argv);
+    SessionService service;
+    SessionRecovery recovery;
+    lc::snip::SnapshotBatch batch(service, recovery, {});
+    ControlledPreparation preparation;
+    lc::pin::CreatePin rejected = [](std::unique_ptr<lc::annotation::AnnotationDocument>& document, QPoint) {
+        return lc::pin::PinCreateResult{.rejectedDocument = std::move(document),
+                                        .error = QStringLiteral("rejected")};
+    };
+    lc::snip::SnipSession session(batch, preparation.function(), {}, rejected);
+    lc::platform::windows::MonitorDescriptor monitor{};
+    monitor.desktopRect = {0, 0, 20, 15};
+    monitor.catalogGeneration = 1;
+    session.begin({monitor});
+    batch.ready({{{0, 0, 20, 15}, annotationTestImage()}});
+    selectRect(session, {2, 3}, {12, 10});
+    const auto selected = session.selection().rect();
+    session.pin();
+    preparation.complete(annotationTestImage());
+    app.processEvents();
+    CHECK(session.state() == lc::snip::SnipSessionState::Selecting);
+    CHECK(session.document() == nullptr);
+    CHECK(session.interaction() == nullptr);
+    CHECK(session.selection().rect() == selected);
+    session.cancel();
+}
+
+TEST_CASE("throwing annotated pin callback restores the same document and history") {
+    int argc = 1;
+    char name[] = "pin-annotation-throw-test";
+    char* argv[] = {name, nullptr};
+    QApplication app(argc, argv);
+    SessionService service;
+    SessionRecovery recovery;
+    lc::snip::SnapshotBatch batch(service, recovery, {});
+    ControlledPreparation preparation;
+    lc::pin::CreatePin throwing = [](std::unique_ptr<lc::annotation::AnnotationDocument>&, QPoint) -> lc::pin::PinCreateResult {
+        throw std::runtime_error("failure");
+    };
+    lc::snip::SnipSession session(batch, preparation.function(), {}, throwing);
+    lc::platform::windows::MonitorDescriptor monitor{};
+    monitor.desktopRect = {0, 0, 20, 15};
+    monitor.catalogGeneration = 1;
+    session.begin({monitor});
+    batch.ready({{{0, 0, 20, 15}, annotationTestImage()}});
+    selectRect(session);
+    session.beginAnnotation(lc::annotation::AnnotationTool::Rectangle);
+    preparation.complete(annotationTestImage());
+    app.processEvents();
+    auto* original = session.document();
+    REQUIRE(original != nullptr);
+    REQUIRE(original->addObject(lc::annotation::RectangleAnnotation{{2, 2, 8, 6}, {Qt::red, 2}})
+                .has_value());
+    session.interaction()->setTool(lc::annotation::AnnotationTool::Mosaic);
+    session.interaction()->setStyle({Qt::green, 7});
+    session.interaction()->setMosaicBlockSize(24);
+    session.pin();
+    CHECK(session.state() == lc::snip::SnipSessionState::Annotating);
+    CHECK(session.document() == original);
+    CHECK(session.interaction()->tool() == lc::annotation::AnnotationTool::Mosaic);
+    CHECK(session.interaction()->style() == lc::annotation::AnnotationStyle{Qt::green, 7});
+    CHECK(session.interaction()->mosaicBlockSize() == 24);
+    REQUIRE(session.document()->undo());
+    CHECK(session.document()->objects().empty());
+    session.cancel();
+}
+
+TEST_CASE("selection pin suppresses duplicates and late preparation after cancel") {
+    int argc = 1;
+    char name[] = "pin-late-completion-test";
+    char* argv[] = {name, nullptr};
+    QApplication app(argc, argv);
+    SessionService service;
+    SessionRecovery recovery;
+    lc::snip::SnapshotBatch batch(service, recovery, {});
+    ControlledPreparation preparation;
+    int createCount{};
+    lc::pin::CreatePin captured = [&createCount](std::unique_ptr<lc::annotation::AnnotationDocument>& document, QPoint) {
+        ++createCount;
+        document.reset();
+        return lc::pin::PinCreateResult{.id = 1};
+    };
+    lc::snip::SnipSession session(batch, preparation.function(), {}, captured);
+    lc::platform::windows::MonitorDescriptor monitor{};
+    monitor.desktopRect = {0, 0, 20, 15};
+    monitor.catalogGeneration = 1;
+    session.begin({monitor});
+    batch.ready({{{0, 0, 20, 15}, annotationTestImage()}});
+    selectRect(session);
+    session.pin();
+    session.pin();
+    REQUIRE(preparation.callbacks.size() == 1);
+    session.cancel();
+    preparation.complete(annotationTestImage());
+    app.processEvents();
+    CHECK(createCount == 0);
+}
+
+TEST_CASE("selection pin display invalidation and null preparation restore selecting") {
+    int argc = 1;
+    char name[] = "pin-invalid-preparation-test";
+    char* argv[] = {name, nullptr};
+    QApplication app(argc, argv);
+    SessionService service;
+    SessionRecovery recovery;
+    lc::snip::SnapshotBatch batch(service, recovery, {});
+    ControlledPreparation preparation;
+    int createCount{};
+    lc::pin::CreatePin captured = [&createCount](std::unique_ptr<lc::annotation::AnnotationDocument>& document, QPoint) {
+        ++createCount;
+        document.reset();
+        return lc::pin::PinCreateResult{.id = 1};
+    };
+    lc::snip::SnipSession session(batch, preparation.function(), {}, captured);
+    lc::platform::windows::MonitorDescriptor monitor{};
+    monitor.desktopRect = {0, 0, 20, 15};
+    monitor.catalogGeneration = 1;
+    session.begin({monitor});
+    batch.ready({{{0, 0, 20, 15}, annotationTestImage()}});
+    selectRect(session);
+    QString error;
+    QObject::connect(&session, &lc::snip::SnipSession::errorOccurred,
+                     [&error](const QString& message) { error = message; });
+    session.pin();
+    preparation.complete({});
+    app.processEvents();
+    CHECK(session.state() == lc::snip::SnipSessionState::Selecting);
+    CHECK(createCount == 0);
+    CHECK_FALSE(error.isEmpty());
+
+    session.pin();
+    const auto overlays = activeOverlays();
+    REQUIRE(overlays.size() == 1);
+    REQUIRE(QMetaObject::invokeMethod(overlays.front(), "displayInvalidated", Qt::DirectConnection));
+    app.processEvents();
+    preparation.complete(annotationTestImage(), 1);
+    app.processEvents();
+    CHECK(createCount == 0);
+    CHECK_FALSE(session.active());
 }
