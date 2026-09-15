@@ -68,6 +68,15 @@ lc::pin::ChoosePinSavePath pinSavePathChooser() {
         dialog->open();
     };
 }
+
+QList<QRect> availableScreenGeometries() {
+    QList<QRect> geometries;
+    for (const auto* screen : QGuiApplication::screens()) {
+        if (screen != nullptr)
+            geometries.push_back(screen->availableGeometry());
+    }
+    return geometries;
+}
 } // namespace
 
 int main(int argc, char* argv[]) {
@@ -143,7 +152,7 @@ int main(int argc, char* argv[]) {
     });
     lc::snip::SnapshotReadback readback(deviceManager);
     lc::snip::SnapshotBatch batch(captureService, deviceManager, readback.function());
-    lc::pin::PinManager pinManager({}, pinSavePathChooser());
+    lc::pin::PinManager pinManager({}, pinSavePathChooser(), availableScreenGeometries);
     lc::snip::SnipSession snipSession(
         batch, {}, {},
         [&pinManager](std::unique_ptr<lc::annotation::AnnotationDocument>& document,
@@ -219,14 +228,6 @@ int main(int argc, char* argv[]) {
 
     QTimer refreshTimer;
     refreshTimer.setSingleShot(true);
-    const auto recoverPinVisibility = [&pinManager] {
-        QList<QRect> availableGeometries;
-        for (const auto* screen : QGuiApplication::screens()) {
-            if (screen != nullptr)
-                availableGeometries.push_back(screen->availableGeometry());
-        }
-        pinManager.recoverVisibility(availableGeometries);
-    };
     QObject::connect(
         &nativeWindow, &lc::platform::windows::NativeMessageWindow::displayConfigurationChanged,
         &refreshTimer, [&refreshTimer, &snipSession, &runtimeState, &applyRuntimeState, &hotkey] {
@@ -239,13 +240,13 @@ int main(int argc, char* argv[]) {
     QObject::connect(
         &refreshTimer, &QTimer::timeout, &controller,
         [&catalog, &controller, &coordinator, &hotkey, &runtimeState, &applyRuntimeState,
-         &snipSession, &recoverPinVisibility] {
+         &snipSession, &pinManager] {
             snipSession.cancel();
             const bool refreshed =
                 std::holds_alternative<std::vector<lc::platform::windows::MonitorDescriptor>>(
                     catalog.refresh());
             if (refreshed)
-                recoverPinVisibility();
+                pinManager.recoverVisibility(availableScreenGeometries());
             runtimeState =
                 lc::app::CaptureRuntimePolicy::afterDisplayRefresh(runtimeState, refreshed);
             const bool needsHotkeyRegistration = runtimeState.registerHotkey;

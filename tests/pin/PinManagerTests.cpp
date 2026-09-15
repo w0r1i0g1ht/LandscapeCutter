@@ -119,6 +119,20 @@ TEST_CASE("pin manager forwards pin errors and recovers only hidden windows") {
     CHECK(error == QStringLiteral("save failed"));
 }
 
+TEST_CASE("pin manager makes a newly created offscreen pin immediately visible") {
+    auto& application = annotationTestApplication();
+    Q_UNUSED(application);
+    PinManager manager({}, {}, [] { return QList<QRect>{{0, 0, 1600, 1000}}; });
+
+    const auto result = manager.create(makeDocument({800, 500}), {2400, 1400});
+
+    REQUIRE(result.id.has_value());
+    auto* window = manager.window(*result.id);
+    REQUIRE(window != nullptr);
+    CHECK(window->isVisible());
+    CHECK(QRect{0, 0, 1600, 1000}.intersects(window->geometry()));
+}
+
 TEST_CASE("pin manager destruction leaves no managed top level window") {
     auto& application = annotationTestApplication();
     Q_UNUSED(application);

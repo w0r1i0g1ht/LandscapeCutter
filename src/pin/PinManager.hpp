@@ -7,15 +7,18 @@
 #include <QPointer>
 
 #include <cstddef>
+#include <functional>
 #include <unordered_map>
 
 namespace lc::pin {
+using AvailablePinGeometries = std::function<QList<QRect>()>;
+
 class PinManager final : public QObject {
     Q_OBJECT
 
   public:
     explicit PinManager(CreatePinWindow factory = {}, ChoosePinSavePath savePathChooser = {},
-                        QObject* parent = nullptr);
+                        AvailablePinGeometries availableGeometries = {}, QObject* parent = nullptr);
     ~PinManager() override;
 
     PinCreateResult create(std::unique_ptr<annotation::AnnotationDocument> document,
@@ -35,6 +38,7 @@ class PinManager final : public QObject {
     void emitCountChanged();
 
     CreatePinWindow factory_;
+    AvailablePinGeometries availableGeometries_;
     std::unordered_map<PinId, QPointer<PinWindow>> windows_;
     PinId nextId_{1};
 };

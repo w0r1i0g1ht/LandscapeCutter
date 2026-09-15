@@ -3,8 +3,10 @@
 #include <vector>
 
 namespace lc::pin {
-PinManager::PinManager(CreatePinWindow factory, ChoosePinSavePath savePathChooser, QObject* parent)
-    : QObject(parent), factory_(std::move(factory)) {
+PinManager::PinManager(CreatePinWindow factory, ChoosePinSavePath savePathChooser,
+                       AvailablePinGeometries availableGeometries, QObject* parent)
+    : QObject(parent), factory_(std::move(factory)),
+      availableGeometries_(std::move(availableGeometries)) {
     if (!factory_) {
         factory_ = [savePathChooser = std::move(savePathChooser)](const PinId id) {
             return new PinWindow(id, savePathChooser);
@@ -42,6 +44,13 @@ PinCreateResult PinManager::create(std::unique_ptr<annotation::AnnotationDocumen
     if (!error.isEmpty()) {
         delete window;
         return {.rejectedDocument = std::move(document), .error = error};
+    }
+    if (availableGeometries_) {
+        try {
+            window->recoverVisibility(availableGeometries_());
+        } catch (...) {
+            // Visibility recovery is best effort and must not roll back an attached document.
+        }
     }
 
     windows_.emplace(id, window);

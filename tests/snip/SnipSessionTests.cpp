@@ -1,6 +1,7 @@
 #include "snip/SnipOverlay.hpp"
 #include "snip/SnipSession.hpp"
 #include "annotation/AnnotationRenderer.hpp"
+#include "pin/PinManager.hpp"
 #include <QApplication>
 #include <QClipboard>
 #include <QElapsedTimer>
@@ -1419,4 +1420,38 @@ TEST_CASE("selection pin display invalidation and null preparation restore selec
     app.processEvents();
     CHECK(createCount == 0);
     CHECK_FALSE(session.active());
+}
+
+TEST_CASE("snip session production pin bridge leaves one visible managed window") {
+    int argc = 1;
+    char name[] = "pin-production-bridge-test";
+    char* argv[] = {name, nullptr};
+    QApplication app(argc, argv);
+    SessionService service;
+    SessionRecovery recovery;
+    lc::snip::SnapshotBatch batch(service, recovery, {});
+    ControlledPreparation preparation;
+    lc::pin::PinManager manager;
+    lc::snip::SnipSession session(
+        batch, preparation.function(), {},
+        [&manager](std::unique_ptr<lc::annotation::AnnotationDocument>& document,
+                   const QPoint preferredTopLeft) {
+            return manager.create(std::move(document), preferredTopLeft);
+        });
+    lc::platform::windows::MonitorDescriptor monitor{};
+    monitor.desktopRect = {0, 0, 20, 15};
+    monitor.catalogGeneration = 1;
+    session.begin({monitor});
+    batch.ready({{{0, 0, 20, 15}, annotationTestImage()}});
+    selectRect(session);
+
+    session.pin();
+    preparation.complete(annotationTestImage());
+    app.processEvents();
+
+    CHECK(session.state() == lc::snip::SnipSessionState::Idle);
+    REQUIRE(manager.count() == 1);
+    auto* window = manager.window(1);
+    REQUIRE(window != nullptr);
+    CHECK(window->isVisible());
 }
