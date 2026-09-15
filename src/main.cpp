@@ -11,12 +11,19 @@
 #include "platform/windows/NativeMessageWindow.hpp"
 #include "platform/windows/SingleInstanceCoordinator.hpp"
 #include "platform/windows/WindowsDisplayTopologySource.hpp"
+#include "pin/PinManager.hpp"
 #include "snip/SnapshotReadback.hpp"
 #include "snip/SnipSession.hpp"
 
 #include <QApplication>
 #include <QCoreApplication>
+#include <QDateTime>
+#include <QFileDialog>
+#include <QFileInfo>
+#include <QGuiApplication>
 #include <QMessageBox>
+#include <QScreen>
+#include <QStandardPaths>
 #include <QTimer>
 
 #include <Windows.h>
@@ -25,6 +32,43 @@
 
 #include <string_view>
 #include <vector>
+
+namespace {
+lc::pin::ChoosePinSavePath pinSavePathChooser() {
+    return [](std::function<void(QString)> accepted, std::function<void()> cancelled) {
+        auto* dialog = new QFileDialog(nullptr, QStringLiteral("保存贴图"));
+        dialog->setAttribute(Qt::WA_DeleteOnClose);
+        dialog->setAcceptMode(QFileDialog::AcceptSave);
+        dialog->setFileMode(QFileDialog::AnyFile);
+        dialog->setOption(QFileDialog::DontUseNativeDialog);
+        dialog->setNameFilters(
+            {QStringLiteral("PNG (*.png)"), QStringLiteral("JPEG (*.jpg *.jpeg)")});
+        dialog->setDefaultSuffix(QStringLiteral("png"));
+        dialog->setDirectory(QStandardPaths::writableLocation(QStandardPaths::PicturesLocation));
+        dialog->selectFile(QStringLiteral("LandscapeCutter-Pin-%1.png")
+                               .arg(QDateTime::currentDateTime().toString("yyyyMMdd-HHmmss")));
+        QObject::connect(dialog, &QFileDialog::filterSelected, dialog,
+                         [dialog](const QString& filter) {
+                             const QString suffix = filter.startsWith(QStringLiteral("JPEG"))
+                                                        ? QStringLiteral("jpg")
+                                                        : QStringLiteral("png");
+                             dialog->setDefaultSuffix(suffix);
+                             const auto files = dialog->selectedFiles();
+                             if (!files.isEmpty())
+                                 dialog->selectFile(QFileInfo(files.front()).completeBaseName() +
+                                                    '.' + suffix);
+                         });
+        QObject::connect(dialog, &QFileDialog::rejected, dialog,
+                         [cancelled = std::move(cancelled)] { cancelled(); });
+        QObject::connect(dialog, &QFileDialog::accepted, dialog,
+                         [dialog, accepted = std::move(accepted)] {
+                             const auto files = dialog->selectedFiles();
+                             accepted(files.isEmpty() ? QString{} : files.front());
+                         });
+        dialog->open();
+    };
+}
+} // namespace
 
 int main(int argc, char* argv[]) {
     std::vector<std::string_view> arguments;
@@ -99,9 +143,21 @@ int main(int argc, char* argv[]) {
     });
     lc::snip::SnapshotReadback readback(deviceManager);
     lc::snip::SnapshotBatch batch(captureService, deviceManager, readback.function());
-    lc::snip::SnipSession snipSession(batch);
+    lc::pin::PinManager pinManager({}, pinSavePathChooser());
+    lc::snip::SnipSession snipSession(
+        batch, {}, {},
+        [&pinManager](std::unique_ptr<lc::annotation::AnnotationDocument>& document,
+                      const QPoint preferredTopLeft) {
+            return pinManager.create(std::move(document), preferredTopLeft);
+        });
     QObject::connect(&snipSession, &lc::snip::SnipSession::errorOccurred, &controller,
                      &lc::app::AppController::showErrorMessage);
+    QObject::connect(&pinManager, &lc::pin::PinManager::errorOccurred, &controller,
+                     &lc::app::AppController::showErrorMessage);
+    QObject::connect(&pinManager, &lc::pin::PinManager::countChanged, &controller,
+                     &lc::app::AppController::setPinCount);
+    QObject::connect(&controller, &lc::app::AppController::closeAllPinsRequested, &pinManager,
+                     &lc::pin::PinManager::closeAll);
     QObject::connect(&batch, &lc::snip::SnapshotBatch::failed, &coordinator,
                      [&coordinator](lc::app::CaptureNoticeCode code) {
                          if (code == lc::app::CaptureNoticeCode::DeviceRecoveryFailed ||
@@ -163,6 +219,14 @@ int main(int argc, char* argv[]) {
 
     QTimer refreshTimer;
     refreshTimer.setSingleShot(true);
+    const auto recoverPinVisibility = [&pinManager] {
+        QList<QRect> availableGeometries;
+        for (const auto* screen : QGuiApplication::screens()) {
+            if (screen != nullptr)
+                availableGeometries.push_back(screen->availableGeometry());
+        }
+        pinManager.recoverVisibility(availableGeometries);
+    };
     QObject::connect(
         &nativeWindow, &lc::platform::windows::NativeMessageWindow::displayConfigurationChanged,
         &refreshTimer, [&refreshTimer, &snipSession, &runtimeState, &applyRuntimeState, &hotkey] {
@@ -175,11 +239,13 @@ int main(int argc, char* argv[]) {
     QObject::connect(
         &refreshTimer, &QTimer::timeout, &controller,
         [&catalog, &controller, &coordinator, &hotkey, &runtimeState, &applyRuntimeState,
-         &snipSession] {
+         &snipSession, &recoverPinVisibility] {
             snipSession.cancel();
             const bool refreshed =
                 std::holds_alternative<std::vector<lc::platform::windows::MonitorDescriptor>>(
                     catalog.refresh());
+            if (refreshed)
+                recoverPinVisibility();
             runtimeState =
                 lc::app::CaptureRuntimePolicy::afterDisplayRefresh(runtimeState, refreshed);
             const bool needsHotkeyRegistration = runtimeState.registerHotkey;
@@ -197,8 +263,9 @@ int main(int argc, char* argv[]) {
             }
         });
     QObject::connect(&application, &QCoreApplication::aboutToQuit, &application,
-                     [&coordinator, &hotkey, &snipSession] {
+                     [&coordinator, &hotkey, &snipSession, &pinManager] {
                          snipSession.cancel();
+                         pinManager.closeAll();
                          coordinator.shutdown();
                          hotkey.unregister();
                      });

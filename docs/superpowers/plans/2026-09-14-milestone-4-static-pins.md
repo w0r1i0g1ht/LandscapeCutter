@@ -715,7 +715,7 @@ git commit -m "feat: create pins from snip sessions"
 - Consumes: `PinManager::create`, `closeAll`, `recoverVisibility`, `countChanged`, SnipSession CreatePin callback, display catalog refresh, and application shutdown.
 - Produces: tray “关闭全部贴图”, production pin creation wiring, display recovery and deterministic shutdown order.
 
-- [ ] **Step 1: Write failing tray and lifecycle tests**
+- [x] **Step 1: Write failing tray and lifecycle tests**
 
 ```cpp
 TEST_CASE("app controller enables close-all only while pins exist") {
@@ -734,7 +734,7 @@ TEST_CASE("app controller enables close-all only while pins exist") {
 
 Assert the action emits `closeAllPinsRequested()` once, `PinManager::countChanged` drives it, application shutdown closes pins before capture resources, and a display refresh sends current available geometries to the manager after catalog refresh succeeds.
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
 
 ```powershell
 cmake --build --preset windows-msvc-debug --target landscapecutter_app_controller_tests landscapecutter_pin_tests
@@ -743,7 +743,7 @@ ctest --test-dir out/build/windows-msvc-debug -C Debug --output-on-failure -R "a
 
 Expected: new tests fail because tray and production wiring do not exist.
 
-- [ ] **Step 3: Add the tray contract**
+- [x] **Step 3: Add the tray contract**
 
 Extend `AppController` with:
 
@@ -755,7 +755,7 @@ signals:
 
 Create `closeAllPinsAction_`, object name `closeAllPinsAction`, text “关闭全部贴图”, initially disabled, placed between capture and quit. Clicking emits only the signal; AppController does not own pin windows.
 
-- [ ] **Step 4: Wire PinManager in main**
+- [x] **Step 4: Wire PinManager in main**
 
 Create `PinManager` before `SnipSession`, inject a lambda that calls `PinManager::create`, and connect errors to `showErrorMessage`. Connect close-all and count signals. After a successful display catalog refresh, build a `QList<QRect>` from `QGuiApplication::screens()` available geometries and call `recoverVisibility`.
 
@@ -768,7 +768,7 @@ coordinator.shutdown();
 hotkey.unregister();
 ```
 
-- [ ] **Step 5: Run safe controller and pin tests**
+- [x] **Step 5: Run safe controller and pin tests**
 
 ```powershell
 cmake --build --preset windows-msvc-debug --target landscapecutter_app_controller_tests landscapecutter_pin_tests LandscapeCutter
@@ -777,7 +777,7 @@ ctest --test-dir out/build/windows-msvc-debug -C Debug --output-on-failure -R "a
 
 Expected: selected tests pass. Do not start `LandscapeCutter.exe` in this task.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```powershell
 git add src/app/AppController.* src/main.cpp tests/app/AppControllerTests.cpp tests/pin/PinManagerTests.cpp

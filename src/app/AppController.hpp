@@ -5,6 +5,8 @@
 #include <QObject>
 #include <QSystemTrayIcon>
 
+#include <cstddef>
+
 #include "app/CaptureCoordinator.hpp"
 
 class QApplication;
@@ -19,6 +21,7 @@ class AppController final : public QObject {
 
     [[nodiscard]] bool start();
     void setCaptureEnabled(bool enabled);
+    void setPinCount(std::size_t count);
     void showCaptureNotice(const CaptureNotice& notice);
     void showErrorMessage(const QString& message);
     void showAlreadyRunning();
@@ -27,11 +30,13 @@ class AppController final : public QObject {
 
   signals:
     void captureRequested();
+    void closeAllPinsRequested();
 
   private:
     QApplication& application_;
     QMenu trayMenu_;
     QAction captureAction_;
+    QAction closeAllPinsAction_;
     QAction quitAction_;
     QSystemTrayIcon trayIcon_;
 };

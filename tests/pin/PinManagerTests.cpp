@@ -2,7 +2,9 @@
 
 #include "../annotation/AnnotationTestApplication.hpp"
 #include "annotation/AnnotationDocument.hpp"
+#include "app/AppController.hpp"
 
+#include <QAction>
 #include <QCoreApplication>
 #include <QPointer>
 
@@ -129,5 +131,27 @@ TEST_CASE("pin manager destruction leaves no managed top level window") {
         REQUIRE(guard != nullptr);
     }
     CHECK(guard == nullptr);
+}
+
+TEST_CASE("tray contract tracks manager count and closes every pin") {
+    auto& application = annotationTestApplication();
+    lc::app::AppController controller(application);
+    PinManager manager;
+    QObject::connect(&manager, &PinManager::countChanged, &controller,
+                     &lc::app::AppController::setPinCount);
+    QObject::connect(&controller, &lc::app::AppController::closeAllPinsRequested, &manager,
+                     &PinManager::closeAll);
+    auto* closeAllPins = controller.findChild<QAction*>("closeAllPinsAction");
+    REQUIRE(closeAllPins != nullptr);
+    CHECK_FALSE(closeAllPins->isEnabled());
+
+    REQUIRE(manager.create(makeDocument(), {}).id.has_value());
+    REQUIRE(manager.create(makeDocument(), {}).id.has_value());
+    CHECK(closeAllPins->isEnabled());
+
+    closeAllPins->trigger();
+
+    CHECK(manager.count() == 0);
+    CHECK_FALSE(closeAllPins->isEnabled());
 }
 } // namespace
