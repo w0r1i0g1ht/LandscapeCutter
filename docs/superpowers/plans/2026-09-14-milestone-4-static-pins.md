@@ -497,7 +497,7 @@ git commit -m "feat: export editable static pins"
 - Consumes: an owned document, preferred top-left point, a window factory for tests, and current available screen geometries.
 - Produces: `PinCreateResult`, `PinManager::create`, `closeAll`, `recoverVisibility`, count tracking and exact document return on failure.
 
-- [ ] **Step 1: Write failing ownership and multi-window tests**
+- [x] **Step 1: Write failing ownership and multi-window tests**
 
 ```cpp
 TEST_CASE("pin manager returns the document when window creation fails") {
@@ -528,7 +528,7 @@ TEST_CASE("pin manager keeps several windows independent") {
 
 Cover invalid/empty documents, monotonic nonzero IDs, closing the same ID twice, `closeAll()` idempotence, countChanged values, user-close removal, display recovery, and manager destruction leaving no top-level pin widgets.
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
 
 ```powershell
 cmake --build --preset windows-msvc-debug --target landscapecutter_pin_tests
@@ -536,7 +536,7 @@ cmake --build --preset windows-msvc-debug --target landscapecutter_pin_tests
 
 Expected: compilation fails because `PinManager` does not exist.
 
-- [ ] **Step 3: Implement exact ownership semantics**
+- [x] **Step 3: Implement exact ownership semantics**
 
 Define:
 
@@ -566,7 +566,7 @@ class PinManager final : public QObject {
 
 Validate the document before allocating a window. Allocate an empty `PinWindow` through the factory while the manager still owns the document; only then call `attachDocument(document, preferredTopLeft)`. The attach function moves `document` only after every fallible validation and initialization step succeeds. Failure returns the same unique pointer in `rejectedDocument`. Store `QPointer<PinWindow>` by ID, let the window use `WA_DeleteOnClose`, and remove its entry exactly once from `destroyed`/`closed` handling.
 
-- [ ] **Step 4: Run safe manager and window tests**
+- [x] **Step 4: Run safe manager and window tests**
 
 ```powershell
 cmake --build --preset windows-msvc-debug --target landscapecutter_pin_tests
@@ -575,7 +575,7 @@ ctest --test-dir out/build/windows-msvc-debug -C Debug --output-on-failure -R "p
 
 Expected: all selected pin tests pass.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```powershell
 git add src/pin/PinManager.* src/pin/PinTypes.hpp tests/pin/PinManagerTests.cpp src/CMakeLists.txt tests/CMakeLists.txt

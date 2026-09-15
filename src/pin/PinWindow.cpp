@@ -148,6 +148,13 @@ PinId PinWindow::id() const noexcept {
     return id_;
 }
 
+bool PinWindow::recoverVisibility(const QList<QRect>& availableGeometries) {
+    if (!geometry_ || !geometry_->ensureOperable(availableGeometries))
+        return false;
+    applyGeometry();
+    return true;
+}
+
 void PinWindow::enterEditing() {
     if (!document_ || mode_ != PinWindowMode::Viewing)
         return;

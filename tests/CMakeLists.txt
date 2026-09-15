@@ -45,6 +45,7 @@ add_custom_command(TARGET landscapecutter_annotation_tests POST_BUILD
 
 add_executable(landscapecutter_pin_tests
     pin/PinGeometryModelTests.cpp
+    pin/PinManagerTests.cpp
     pin/PinWindowTests.cpp
 )
 

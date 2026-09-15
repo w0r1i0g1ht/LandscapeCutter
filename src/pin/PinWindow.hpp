@@ -46,6 +46,7 @@ class PinWindow final : public QWidget {
     [[nodiscard]] annotation::AnnotationDocument* document() const noexcept;
     [[nodiscard]] PinWindowMode mode() const noexcept;
     [[nodiscard]] PinId id() const noexcept;
+    bool recoverVisibility(const QList<QRect>& availableGeometries);
     void enterEditing();
     void finishEditing();
 
