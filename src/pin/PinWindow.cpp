@@ -4,6 +4,7 @@
 #include "annotation/AnnotationInteraction.hpp"
 #include "annotation/AnnotationRenderer.hpp"
 #include "annotation/AnnotationToolbar.hpp"
+#include "snip/SnapshotImage.hpp"
 
 #include <QCloseEvent>
 #include <QContextMenuEvent>
@@ -14,17 +15,33 @@
 #include <QPainter>
 #include <QPlainTextEdit>
 #include <QAction>
+#include <QApplication>
+#include <QClipboard>
+#include <QCoreApplication>
+#include <QFileInfo>
+#include <QMetaObject>
+#include <QRunnable>
 #include <QWheelEvent>
 
 #include <algorithm>
+#include <atomic>
+#include <exception>
+#include <mutex>
 
 namespace lc::pin {
-PinWindow::PinWindow(const PinId id, QWidget* parent)
-    : QWidget(parent, Qt::Tool | Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint), id_(id) {
+struct PinWindow::ExportState {
+    std::atomic_bool cancelled{false};
+    std::mutex finalizationMutex;
+};
+
+PinWindow::PinWindow(const PinId id, ChoosePinSavePath chooser, QWidget* parent)
+    : QWidget(parent, Qt::Tool | Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint), id_(id),
+      chooseSavePath_(std::move(chooser)) {
     setAttribute(Qt::WA_DeleteOnClose, true);
     setAttribute(Qt::WA_QuitOnClose, false);
     setFocusPolicy(Qt::StrongFocus);
     setMouseTracking(true);
+    exportPool_.setMaxThreadCount(1);
 
     toolbar_ = new annotation::AnnotationToolbar(this);
     toolbar_->setObjectName(QStringLiteral("pinToolbar"));
@@ -89,7 +106,9 @@ PinWindow::PinWindow(const PinId id, QWidget* parent)
     contextMenu_->addAction(closeAction_);
 }
 
-PinWindow::~PinWindow() = default;
+PinWindow::~PinWindow() {
+    cancelExportAndWait();
+}
 
 QString PinWindow::attachDocument(std::unique_ptr<annotation::AnnotationDocument>& document,
                                   const QPoint preferredTopLeft) {
@@ -153,6 +172,8 @@ void PinWindow::finishEditing() {
 }
 
 void PinWindow::closeEvent(QCloseEvent* event) {
+    cancelExportAndWait();
+    cancelTextEditor();
     if (!closeEmitted_) {
         closeEmitted_ = true;
         emit closed(id_);
@@ -435,19 +456,146 @@ void PinWindow::resetOpacity() {
 }
 
 void PinWindow::requestCopy() {
-    if (!document_)
+    if (!document_ || mode_ == PinWindowMode::ChoosingSavePath || mode_ == PinWindowMode::Exporting)
         return;
     if (textEditor_)
         commitTextEditor();
+    const auto snapshot = document_->snapshot();
+    const auto priorMode = mode_;
     emit copyRequested(id_);
+    beginCopyExport(snapshot, priorMode);
 }
 
 void PinWindow::requestSave() {
-    if (!document_)
+    if (!document_ || mode_ == PinWindowMode::ChoosingSavePath || mode_ == PinWindowMode::Exporting)
         return;
     if (textEditor_)
         commitTextEditor();
+    if (!chooseSavePath_)
+        return;
+    const auto snapshot = document_->snapshot();
+    const auto priorMode = mode_;
+    const auto requestId = ++nextRequestId_;
+    activeRequestId_ = requestId;
+    outputPriorMode_ = priorMode;
+    exportState_ = std::make_shared<ExportState>();
+    mode_ = PinWindowMode::ChoosingSavePath;
+    toolbar_->setBusy(true);
     emit saveRequested(id_);
+    QPointer<PinWindow> self(this);
+    chooseSavePath_(
+        [self, snapshot, priorMode, requestId](QString path) mutable {
+            if (!self || self->activeRequestId_ != requestId ||
+                self->mode_ != PinWindowMode::ChoosingSavePath || !self->exportState_ ||
+                self->exportState_->cancelled.load(std::memory_order_acquire))
+                return;
+            if (path.isEmpty()) {
+                self->restoreOutputMode(requestId);
+                return;
+            }
+            self->beginSaveExport(std::move(path), std::move(snapshot), priorMode, requestId);
+        },
+        [self, requestId] {
+            if (self)
+                self->restoreOutputMode(requestId);
+        });
+}
+
+void PinWindow::beginCopyExport(annotation::AnnotationSnapshot snapshot, const PinWindowMode priorMode) {
+    const auto requestId = ++nextRequestId_;
+    activeRequestId_ = requestId;
+    outputPriorMode_ = priorMode;
+    exportState_ = std::make_shared<ExportState>();
+    const auto state = exportState_;
+    mode_ = PinWindowMode::Exporting;
+    toolbar_->setBusy(true);
+    QPointer<PinWindow> self(this);
+    exportPool_.start(QRunnable::create([self, snapshot = std::move(snapshot), state, requestId] {
+        if (state->cancelled.load(std::memory_order_acquire))
+            return;
+        QImage image;
+        QString error;
+        try {
+            image = annotation::composeAnnotations(snapshot);
+            if (image.isNull())
+                error = QStringLiteral("无法生成贴图图像。");
+        } catch (const std::exception& exception) {
+            error = QString::fromUtf8(exception.what());
+        } catch (...) {
+            error = QStringLiteral("生成贴图图像时发生未知错误。");
+        }
+        QMetaObject::invokeMethod(QCoreApplication::instance(), [self, state, requestId,
+                                                                   image = std::move(image), error = std::move(error)]() mutable {
+            if (!self || state->cancelled.load(std::memory_order_acquire) ||
+                self->activeRequestId_ != requestId || self->exportState_ != state ||
+                self->mode_ != PinWindowMode::Exporting)
+                return;
+            if (error.isEmpty())
+                QApplication::clipboard()->setImage(image);
+            else
+                emit self->errorOccurred(self->id_, error);
+            self->restoreOutputMode(requestId);
+        }, Qt::QueuedConnection);
+    }));
+}
+
+void PinWindow::beginSaveExport(QString path, annotation::AnnotationSnapshot snapshot,
+                                const PinWindowMode priorMode, const std::uint64_t requestId) {
+    if (!exportState_ || activeRequestId_ != requestId)
+        return;
+    outputPriorMode_ = priorMode;
+    mode_ = PinWindowMode::Exporting;
+    const auto state = exportState_;
+    const QByteArray format = QFileInfo(path).suffix().compare(QStringLiteral("jpg"), Qt::CaseInsensitive) == 0 ||
+                                      QFileInfo(path).suffix().compare(QStringLiteral("jpeg"), Qt::CaseInsensitive) == 0
+                                  ? QByteArrayLiteral("jpeg")
+                                  : QByteArrayLiteral("png");
+    QPointer<PinWindow> self(this);
+    exportPool_.start(QRunnable::create([self, path = std::move(path), snapshot = std::move(snapshot), state,
+                                         requestId, format] {
+        QString error;
+        try {
+            const QImage image = annotation::composeAnnotations(snapshot);
+            error = lc::snip::saveImage(image, path, format, &state->cancelled,
+                                        &state->finalizationMutex);
+        } catch (const std::exception& exception) {
+            error = QString::fromUtf8(exception.what());
+        } catch (...) {
+            error = QStringLiteral("保存贴图时发生未知错误。");
+        }
+        QMetaObject::invokeMethod(QCoreApplication::instance(), [self, state, requestId, error] {
+            if (!self || state->cancelled.load(std::memory_order_acquire) ||
+                self->activeRequestId_ != requestId || self->exportState_ != state)
+                return;
+            if (!error.isEmpty())
+                emit self->errorOccurred(self->id_, error);
+            self->restoreOutputMode(requestId);
+        }, Qt::QueuedConnection);
+    }));
+}
+
+void PinWindow::restoreOutputMode(const std::uint64_t requestId) {
+    if (activeRequestId_ != requestId || !exportState_ ||
+        exportState_->cancelled.load(std::memory_order_acquire))
+        return;
+    exportState_.reset();
+    mode_ = outputPriorMode_;
+    toolbar_->setBusy(false);
+    toolbar_->setVisible(mode_ == PinWindowMode::Editing);
+    refresh();
+}
+
+void PinWindow::cancelExportAndWait() {
+    const auto state = exportState_;
+    if (state)
+        state->cancelled.store(true, std::memory_order_release);
+    ++nextRequestId_;
+    activeRequestId_ = nextRequestId_;
+    exportPool_.waitForDone();
+    if (state) {
+        std::lock_guard<std::mutex> lock(state->finalizationMutex);
+    }
+    exportState_.reset();
 }
 
 QTransform PinWindow::documentToWindowTransform() const {

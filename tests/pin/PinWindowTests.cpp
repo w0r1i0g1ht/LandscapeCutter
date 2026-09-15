@@ -2,18 +2,23 @@
 
 #include "../annotation/AnnotationTestApplication.hpp"
 #include "annotation/AnnotationDocument.hpp"
+#include "annotation/AnnotationRenderer.hpp"
 #include "annotation/AnnotationTypes.hpp"
 
 #include <QApplication>
 #include <QAction>
 #include <QContextMenuEvent>
+#include <QClipboard>
 #include <QCoreApplication>
+#include <QElapsedTimer>
 #include <QMenu>
 #include <QMouseEvent>
 #include <QToolButton>
 #include <QWheelEvent>
 #include <QPlainTextEdit>
 #include <QPointer>
+#include <QTemporaryDir>
+#include <QThread>
 
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
@@ -25,6 +30,29 @@ using Catch::Approx;
 using lc::annotation::AnnotationDocument;
 using lc::pin::PinWindow;
 using lc::pin::PinWindowMode;
+
+struct ControlledPinSavePathChooser {
+    std::function<void(QString)> accept;
+    std::function<void()> cancel;
+
+    lc::pin::ChoosePinSavePath function() {
+        return [this](auto onAccept, auto onCancel) {
+            accept = std::move(onAccept);
+            cancel = std::move(onCancel);
+        };
+    }
+};
+
+template <typename Predicate>
+bool waitFor(Predicate predicate, int timeoutMilliseconds = 3000) {
+    QElapsedTimer timer;
+    timer.start();
+    while (!predicate() && timer.elapsed() < timeoutMilliseconds) {
+        QCoreApplication::processEvents();
+        QThread::msleep(1);
+    }
+    return predicate();
+}
 
 std::unique_ptr<AnnotationDocument> makeDocument(QSize size = {100, 50}) {
     QImage image(size, QImage::Format_RGB32);
@@ -239,7 +267,8 @@ TEST_CASE("pin window non-text double click stays editing without creating text"
 TEST_CASE("pin window empty text is discarded and actions emit host signals") {
     auto& application = annotationTestApplication();
     Q_UNUSED(application);
-    auto window = std::make_unique<PinWindow>(10);
+    auto window = std::make_unique<PinWindow>(
+        10, [](auto, auto onCancel) { onCancel(); });
     auto document = makeDocument();
     REQUIRE(window->attachDocument(document, {}).isEmpty());
     window->enterEditing();
@@ -295,6 +324,7 @@ TEST_CASE("pin window empty text is discarded and actions emit host signals") {
                                             window->findChild<QPlainTextEdit*>("annotationTextEditor") == nullptr;
                      });
     copy->trigger();
+    REQUIRE(waitFor([&] { return window->mode() != PinWindowMode::Exporting; }));
 
     text->click();
     sendMouse(*window, QEvent::MouseButtonPress, {100, 60}, {100, 60}, Qt::LeftButton,
@@ -331,6 +361,125 @@ TEST_CASE("pin window attach rejection preserves the caller document") {
     auto* original = rejected.get();
     CHECK_FALSE(window->attachDocument(rejected, {}).isEmpty());
     CHECK(rejected.get() == original);
+}
+
+TEST_CASE("pin copy exports current annotations and stays open") {
+    auto& application = annotationTestApplication();
+    auto window = std::make_unique<PinWindow>(12);
+    auto document = makeDocument({80, 40});
+    REQUIRE(document->addObject(lc::annotation::RectangleAnnotation{{5, 5, 20, 10}, {Qt::red, 3}})
+                .has_value());
+    REQUIRE(window->attachDocument(document, {}).isEmpty());
+    const auto expected = lc::annotation::composeAnnotations(window->document()->snapshot());
+    auto* copy = window->findChild<QAction*>("pinCopyAction");
+    REQUIRE(copy != nullptr);
+    copy->trigger();
+    REQUIRE(waitFor([&] { return window->mode() != PinWindowMode::Exporting; }));
+    CHECK(window->isVisible());
+    CHECK(application.clipboard()->image().convertToFormat(QImage::Format_RGB32) == expected);
+    CHECK(window->document()->canUndo());
+}
+
+TEST_CASE("pin save cancellation restores the exact editing mode") {
+    auto& application = annotationTestApplication();
+    Q_UNUSED(application);
+    ControlledPinSavePathChooser chooser;
+    auto window = std::make_unique<PinWindow>(13, chooser.function());
+    auto document = makeDocument();
+    REQUIRE(document->addObject(lc::annotation::RectangleAnnotation{{5, 5, 20, 10}, {Qt::red, 3}})
+                .has_value());
+    REQUIRE(window->attachDocument(document, {}).isEmpty());
+    window->enterEditing();
+    auto* save = window->findChild<QAction*>("pinSaveAction");
+    REQUIRE(save != nullptr);
+    save->trigger();
+    REQUIRE(chooser.cancel);
+    chooser.cancel();
+    CHECK(window->mode() == PinWindowMode::Editing);
+    CHECK(window->document()->canUndo());
+}
+
+TEST_CASE("pin save writes PNG and JPEG without changing history") {
+    auto& application = annotationTestApplication();
+    Q_UNUSED(application);
+    QTemporaryDir directory;
+    REQUIRE(directory.isValid());
+    QString requestedPath;
+    auto chooser = [&requestedPath](auto accept, auto) { accept(requestedPath); };
+    auto window = std::make_unique<PinWindow>(14, chooser);
+    auto document = makeDocument({80, 40});
+    REQUIRE(document->addObject(lc::annotation::RectangleAnnotation{{5, 5, 40, 20}, {Qt::red, 3}})
+                .has_value());
+    REQUIRE(window->attachDocument(document, {}).isEmpty());
+    const auto expected = lc::annotation::composeAnnotations(window->document()->snapshot());
+    const bool hadUndo = window->document()->canUndo();
+    auto* save = window->findChild<QAction*>("pinSaveAction");
+    REQUIRE(save != nullptr);
+
+    requestedPath = directory.filePath("pin.png");
+    save->trigger();
+    REQUIRE(waitFor([&] { return window->mode() == PinWindowMode::Viewing; }));
+    CHECK(QImage(requestedPath).convertToFormat(QImage::Format_RGB32) == expected);
+    CHECK(window->document()->canUndo() == hadUndo);
+
+    requestedPath = directory.filePath("pin.jpg");
+    save->trigger();
+    REQUIRE(waitFor([&] { return window->mode() == PinWindowMode::Viewing; }));
+    const auto decoded = QImage(requestedPath).convertToFormat(QImage::Format_RGB32);
+    REQUIRE(decoded.size() == expected.size());
+    qint64 totalError{};
+    for (int y = 0; y < expected.height(); ++y) {
+        for (int x = 0; x < expected.width(); ++x) {
+            const auto actual = decoded.pixelColor(x, y);
+            const auto target = expected.pixelColor(x, y);
+            totalError += qAbs(actual.red() - target.red()) + qAbs(actual.green() - target.green()) +
+                          qAbs(actual.blue() - target.blue());
+        }
+    }
+    CHECK(totalError / (expected.width() * expected.height() * 3) < 10);
+    CHECK(window->document()->canUndo() == hadUndo);
+}
+
+TEST_CASE("pin save failure returns to viewing and retains the document") {
+    auto& application = annotationTestApplication();
+    Q_UNUSED(application);
+    auto chooser = [](auto accept, auto) { accept(QStringLiteral("Z:/missing-parent/pin.png")); };
+    auto window = std::make_unique<PinWindow>(15, chooser);
+    auto document = makeDocument();
+    REQUIRE(document->addObject(lc::annotation::RectangleAnnotation{{5, 5, 20, 10}, {Qt::red, 3}})
+                .has_value());
+    REQUIRE(window->attachDocument(document, {}).isEmpty());
+    auto* save = window->findChild<QAction*>("pinSaveAction");
+    REQUIRE(save != nullptr);
+    QString error;
+    QObject::connect(window.get(), &PinWindow::errorOccurred,
+                     [&error](const auto, const QString& message) { error = message; });
+    save->trigger();
+    REQUIRE(waitFor([&] { return window->mode() == PinWindowMode::Viewing; }));
+    CHECK(window->document()->objects().size() == 1);
+    CHECK(window->document()->canUndo());
+    CHECK_FALSE(error.isEmpty());
+}
+
+TEST_CASE("pin close cancels queued clipboard completion before destruction") {
+    auto& application = annotationTestApplication();
+    QImage sentinel({3, 2}, QImage::Format_RGB32);
+    sentinel.fill(Qt::green);
+    application.clipboard()->setImage(sentinel);
+
+    auto* window = new PinWindow(16);
+    auto document = makeDocument({1024, 1024});
+    REQUIRE(window->attachDocument(document, {}).isEmpty());
+    auto* copy = window->findChild<QAction*>("pinCopyAction");
+    REQUIRE(copy != nullptr);
+    copy->trigger();
+    REQUIRE(window->mode() == PinWindowMode::Exporting);
+    QPointer<PinWindow> guard(window);
+    window->close();
+    QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+    QCoreApplication::processEvents();
+    CHECK(guard == nullptr);
+    CHECK(application.clipboard()->image().convertToFormat(QImage::Format_RGB32) == sentinel);
 }
 
 TEST_CASE("pin window escape cancels a draft before it leaves editing") {

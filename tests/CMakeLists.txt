@@ -66,6 +66,14 @@ add_custom_command(TARGET landscapecutter_pin_tests POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
         "$<TARGET_FILE:Qt6::QOffscreenIntegrationPlugin>"
         "$<TARGET_FILE_DIR:landscapecutter_pin_tests>/platforms"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "$<TARGET_FILE:libjpeg-turbo::jpeg>"
+        "$<TARGET_FILE_DIR:landscapecutter_pin_tests>"
+    COMMAND ${CMAKE_COMMAND} -E make_directory
+        "$<TARGET_FILE_DIR:landscapecutter_pin_tests>/imageformats"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "$<TARGET_FILE:Qt6::QJpegPlugin>"
+        "$<TARGET_FILE_DIR:landscapecutter_pin_tests>/imageformats"
 )
 
 target_link_libraries(landscapecutter_unit_tests PRIVATE

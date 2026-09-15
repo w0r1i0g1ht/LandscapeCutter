@@ -411,7 +411,7 @@ git commit -m "feat: add editable static pin window"
 - Consumes: immutable `AnnotationSnapshot`, `composeAnnotations`, clipboard access, existing `saveImage`, and injected save-path selection.
 - Produces: non-destructive asynchronous copy/save from a pin and safe cancellation on close.
 
-- [ ] **Step 1: Write failing output and lifecycle tests**
+- [x] **Step 1: Write failing output and lifecycle tests**
 
 ```cpp
 TEST_CASE("pin copy exports current annotations and stays open") {
@@ -441,6 +441,8 @@ Add PNG exact round-trip, JPEG decoded-size/average-error threshold, save failur
 
 - [ ] **Step 2: Verify RED with the pin target only**
 
+> Audit note: the new output tests were added during implementation, but this historical RED build was not recorded separately. It remains unchecked rather than being reconstructed after the fact.
+
 ```powershell
 cmake --build --preset windows-msvc-debug --target landscapecutter_pin_tests
 ctest --test-dir out/build/windows-msvc-debug -C Debug --output-on-failure -R "pin copy|pin save|pin export"
@@ -448,7 +450,7 @@ ctest --test-dir out/build/windows-msvc-debug -C Debug --output-on-failure -R "p
 
 Expected: new cases fail because output handlers are not implemented.
 
-- [ ] **Step 3: Implement immutable snapshot output**
+- [x] **Step 3: Implement immutable snapshot output**
 
 Add a save-path injection equivalent to `SnipSession`:
 
@@ -463,7 +465,7 @@ Also add a single-thread `QThreadPool`, cancellation flag, finalization mutex, m
 
 Clipboard commit returns to the GUI thread and checks `QPointer<PinWindow>`, cancellation and request ID before calling `QApplication::clipboard()->setImage`. Save selection cancellation and encoding failure restore the precise prior Viewing/Editing state and leave history untouched. Closing invalidates the request and synchronizes with final commit before releasing state.
 
-- [ ] **Step 4: Run safe output tests**
+- [x] **Step 4: Run safe output tests**
 
 ```powershell
 cmake --build --preset windows-msvc-debug --target landscapecutter_pin_tests landscapecutter_unit_tests
@@ -472,7 +474,7 @@ ctest --test-dir out/build/windows-msvc-debug -C Debug --output-on-failure -R "p
 
 Expected: selected output tests pass; no capture or graphics case is listed or run.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```powershell
 git add src/pin/PinWindow.* tests/pin/PinWindowTests.cpp tests/snip/SnapshotImageTests.cpp
