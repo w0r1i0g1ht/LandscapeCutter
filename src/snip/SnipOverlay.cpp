@@ -6,6 +6,7 @@
 #include "annotation/AnnotationToolbar.hpp"
 
 #include <QCloseEvent>
+#include <QFrame>
 #include <QGuiApplication>
 #include <QKeyEvent>
 #include <QMouseEvent>
@@ -15,6 +16,7 @@
 #include <QResizeEvent>
 #include <QScreen>
 #include <QShowEvent>
+#include <QTextDocument>
 #include <QTimer>
 #include <algorithm>
 #include <array>
@@ -143,21 +145,24 @@ bool SnipOverlay::isToolbarHost() const noexcept {
 }
 
 void SnipOverlay::createTextEditor(QPointF anchor) {
+    if (textEditor_) {
+        commitTextEditor();
+        return;
+    }
     beginTextEditor(anchor);
 }
 
 void SnipOverlay::editTextEditor(const annotation::AnnotationId id) {
     if (!annotating() || !ownsToolbar())
         return;
+    if (textEditor_) {
+        commitTextEditor();
+        return;
+    }
     const auto found = std::find_if(document_->objects().begin(), document_->objects().end(),
                                     [id](const auto& object) { return object.id == id; });
     if (found != document_->objects().end() &&
         std::holds_alternative<annotation::TextAnnotation>(found->payload)) {
-        if (textEditor_) {
-            if (textEditBefore_.has_value() || !textEditor_->toPlainText().trimmed().isEmpty())
-                return;
-            cancelTextEditor();
-        }
         cancelAnnotationGesture();
         static_cast<void>(document_->select(id));
         beginTextEditor(std::get<annotation::TextAnnotation>(found->payload).anchor, *found);
@@ -351,6 +356,12 @@ void SnipOverlay::mousePressEvent(QMouseEvent* event) {
         return;
     }
 
+    if (annotating() && textEditor_) {
+        commitTextEditor();
+        event->accept();
+        return;
+    }
+
     if (annotating() && interaction_->tool() == annotation::AnnotationTool::Text) {
         const auto hit = interaction_->hitTest(annotationPoint(event));
         const auto found = hit.has_value()
@@ -370,11 +381,6 @@ void SnipOverlay::mousePressEvent(QMouseEvent* event) {
             else
                 emit annotationTextCreateRequested(annotationPoint(event));
         }
-        event->accept();
-        return;
-    }
-
-    if (annotating() && textEditor_) {
         event->accept();
         return;
     }
@@ -589,6 +595,9 @@ void SnipOverlay::beginTextEditor(QPointF anchor,
     auto* editor = new QPlainTextEdit(this);
     textEditor_ = editor;
     editor->setObjectName(QStringLiteral("annotationTextEditor"));
+    editor->setFrameShape(QFrame::NoFrame);
+    editor->setContentsMargins(0, 0, 0, 0);
+    editor->document()->setDocumentMargin(0.0);
     editor->setLineWrapMode(QPlainTextEdit::NoWrap);
     editor->setFont(annotation::resolvedAnnotationFont(annotation::transformedTextPixelSize(
         textEditStyle_.physicalSize, documentToLocalTransform())));

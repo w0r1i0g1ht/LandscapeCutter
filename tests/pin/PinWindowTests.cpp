@@ -19,6 +19,7 @@
 #include <QPointer>
 #include <QSpinBox>
 #include <QTemporaryDir>
+#include <QTextDocument>
 #include <QThread>
 
 #include <catch2/catch_approx.hpp>
@@ -202,6 +203,52 @@ TEST_CASE("pin text editor matches the scaled rendered size and keeps text edita
     CHECK(window->mode() == PinWindowMode::Viewing);
     window->enterEditing();
     CHECK(window->document()->objects().size() == 1);
+}
+
+TEST_CASE("pin text editor commits when the image is clicked elsewhere") {
+    auto& application = annotationTestApplication();
+    Q_UNUSED(application);
+    auto window = std::make_unique<PinWindow>(19);
+    auto document = makeDocument({120, 80});
+    REQUIRE(attachAt(*window, document).isEmpty());
+    window->enterEditing();
+    auto* text = window->findChild<QToolButton*>("textToolButton");
+    REQUIRE(text != nullptr);
+    text->click();
+    sendMouse(*window, QEvent::MouseButtonPress, {10, 10}, {10, 10}, Qt::LeftButton,
+              Qt::LeftButton);
+    auto* editor = window->findChild<QPlainTextEdit*>("annotationTextEditor");
+    REQUIRE(editor != nullptr);
+    editor->setPlainText(QStringLiteral("committed"));
+
+    sendMouse(*window, QEvent::MouseButtonPress, {100, 65}, {100, 65}, Qt::LeftButton,
+              Qt::LeftButton);
+
+    CHECK(window->findChild<QPlainTextEdit*>("annotationTextEditor") == nullptr);
+    REQUIRE(window->document()->objects().size() == 1);
+    const auto& annotation = std::get<lc::annotation::TextAnnotation>(
+        window->document()->objects().front().payload);
+    CHECK(annotation.anchor == QPointF(10, 10));
+    CHECK(annotation.text == QStringLiteral("committed"));
+}
+
+TEST_CASE("pin text editor content origin matches the rendered text anchor") {
+    auto& application = annotationTestApplication();
+    Q_UNUSED(application);
+    auto window = std::make_unique<PinWindow>(20);
+    auto document = makeDocument({240, 160});
+    REQUIRE(window->attachDocument(document, {0, 0, 120, 80}).isEmpty());
+    window->enterEditing();
+    auto* text = window->findChild<QToolButton*>("textToolButton");
+    REQUIRE(text != nullptr);
+    text->click();
+    sendMouse(*window, QEvent::MouseButtonPress, {10, 10}, {10, 10}, Qt::LeftButton,
+              Qt::LeftButton);
+    auto* editor = window->findChild<QPlainTextEdit*>("annotationTextEditor");
+    REQUIRE(editor != nullptr);
+
+    CHECK(editor->document()->documentMargin() == 0.0);
+    CHECK(editor->viewport()->mapTo(window.get(), QPoint{}) == QPoint(10, 10));
 }
 
 TEST_CASE("pin window routes rectangle selection history and delete while editing") {

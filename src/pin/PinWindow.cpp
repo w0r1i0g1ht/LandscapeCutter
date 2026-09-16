@@ -9,6 +9,7 @@
 #include <QCloseEvent>
 #include <QContextMenuEvent>
 #include <QEvent>
+#include <QFrame>
 #include <QKeyEvent>
 #include <QMenu>
 #include <QMouseEvent>
@@ -23,6 +24,7 @@
 #include <QMetaObject>
 #include <QRunnable>
 #include <QScreen>
+#include <QTextDocument>
 #include <QWheelEvent>
 
 #include <algorithm>
@@ -406,6 +408,9 @@ void PinWindow::beginTextEditor(QPointF anchor,
     auto* editor = new QPlainTextEdit(this);
     textEditor_ = editor;
     editor->setObjectName(QStringLiteral("annotationTextEditor"));
+    editor->setFrameShape(QFrame::NoFrame);
+    editor->setContentsMargins(0, 0, 0, 0);
+    editor->document()->setDocumentMargin(0.0);
     editor->setLineWrapMode(QPlainTextEdit::NoWrap);
     editor->setFont(annotation::resolvedAnnotationFont(annotation::transformedTextPixelSize(
         textEditStyle_.physicalSize, documentToWindowTransform())));
@@ -450,14 +455,16 @@ void PinWindow::cancelTextEditor() {
 void PinWindow::editTextAt(QPointF point) {
     if (!document_ || !interaction_)
         return;
+    if (textEditor_) {
+        commitTextEditor();
+        return;
+    }
     const auto hit = interaction_->hitTest(point);
     if (hit.has_value()) {
         const auto found = std::find_if(document_->objects().begin(), document_->objects().end(),
                                         [hit](const auto& object) { return object.id == *hit; });
         if (found != document_->objects().end() &&
             std::holds_alternative<annotation::TextAnnotation>(found->payload)) {
-            if (textEditor_)
-                return;
             interaction_->cancelDraft();
             static_cast<void>(document_->select(*hit));
             beginTextEditor(std::get<annotation::TextAnnotation>(found->payload).anchor, *found);

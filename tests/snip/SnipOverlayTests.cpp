@@ -12,6 +12,7 @@
 #include <QPlainTextEdit>
 #include <QRegion>
 #include <QSpinBox>
+#include <QTextDocument>
 #include <QTextCursor>
 #include <QToolButton>
 
@@ -590,6 +591,54 @@ TEST_CASE("annotation text editor exists only on the active toolbar host and com
     CHECK(std::get<TextAnnotation>(document.objects().front().payload).text == QStringLiteral("first"));
     REQUIRE(document.undo());
     CHECK(document.objects().empty());
+}
+
+TEST_CASE("annotation text editor commits when the selected image is clicked elsewhere") {
+    ApplicationFixture fixture;
+    SelectionModel selection;
+    selection.setBounds({0, 0, 120, 80});
+    auto document = annotationDocument({120, 80});
+    AnnotationInteraction interaction(document);
+    interaction.setTool(AnnotationTool::Text);
+    QImage image({120, 80}, QImage::Format_RGB32);
+    image.fill(Qt::white);
+    SnipOverlay overlay{{{0, 0, 120, 80}, image}, selection};
+    overlay.setToolbarHost(true);
+    overlay.setAnnotationContext(&document, &interaction, {0, 0, 120, 80});
+    overlay.createTextEditor({10, 10});
+    auto* editor = overlay.findChild<QPlainTextEdit*>("annotationTextEditor");
+    REQUIRE(editor != nullptr);
+    editor->setPlainText(QStringLiteral("committed"));
+
+    QMouseEvent press{QEvent::MouseButtonPress, QPointF{100, 65}, QPointF{100, 65},
+                      Qt::LeftButton, Qt::LeftButton, Qt::NoModifier};
+    QApplication::sendEvent(&overlay, &press);
+
+    CHECK(overlay.findChild<QPlainTextEdit*>("annotationTextEditor") == nullptr);
+    REQUIRE(document.objects().size() == 1);
+    const auto& annotation = std::get<TextAnnotation>(document.objects().front().payload);
+    CHECK(annotation.anchor == QPointF(10, 10));
+    CHECK(annotation.text == QStringLiteral("committed"));
+}
+
+TEST_CASE("annotation text editor content origin matches the rendered text anchor") {
+    ApplicationFixture fixture;
+    SelectionModel selection;
+    selection.setBounds({0, 0, 120, 80});
+    auto document = annotationDocument({120, 80});
+    AnnotationInteraction interaction(document);
+    interaction.setTool(AnnotationTool::Text);
+    QImage image({120, 80}, QImage::Format_RGB32);
+    image.fill(Qt::white);
+    SnipOverlay overlay{{{0, 0, 120, 80}, image}, selection};
+    overlay.setToolbarHost(true);
+    overlay.setAnnotationContext(&document, &interaction, {0, 0, 120, 80});
+    overlay.createTextEditor({10, 10});
+    auto* editor = overlay.findChild<QPlainTextEdit*>("annotationTextEditor");
+    REQUIRE(editor != nullptr);
+
+    CHECK(editor->document()->documentMargin() == 0.0);
+    CHECK(editor->viewport()->mapTo(&overlay, QPoint{}) == QPoint(10, 10));
 }
 
 TEST_CASE("copy and save commit pending text before requesting export") {
