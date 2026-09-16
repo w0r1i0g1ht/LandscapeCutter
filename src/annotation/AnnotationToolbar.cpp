@@ -133,6 +133,28 @@ AnnotationToolbar::AnnotationToolbar(QWidget* parent) : QWidget(parent) {
         emit annotationChanged();
     });
 
+    fontSize_ = new QSpinBox(this);
+    fontSize_->setObjectName(QStringLiteral("fontSizeSpinBox"));
+    fontSize_->setRange(1, 256);
+    fontSize_->setValue(24);
+    fontSize_->setPrefix(tr("字号 "));
+    fontSize_->setSuffix(tr(" px"));
+    fontSize_->setToolTip(tr("文字标注的字号"));
+    fontSize_->setFocusPolicy(Qt::NoFocus);
+    layout->addWidget(fontSize_);
+    connect(fontSize_, &QSpinBox::valueChanged, this, [this](const int pixelSize) {
+        if (document_ && interaction_ && interaction_->tool() == AnnotationTool::Select) {
+            const auto* selected = selectedAnnotation(document_);
+            if (selected && std::holds_alternative<TextAnnotation>(selected->payload)) {
+                auto replacement = *selected;
+                std::get<TextAnnotation>(replacement.payload).style.physicalSize = pixelSize;
+                static_cast<void>(document_->replaceObject(std::move(replacement)));
+            }
+        }
+        emit textSizeChanged(pixelSize);
+        emit annotationChanged();
+    });
+
     mosaicBlockSize_ = new QSpinBox(this);
     mosaicBlockSize_->setObjectName(QStringLiteral("mosaicBlockSizeSpinBox"));
     mosaicBlockSize_->setRange(1, 128);
@@ -201,6 +223,10 @@ void AnnotationToolbar::setBusy(const bool busy) {
     refresh();
 }
 
+int AnnotationToolbar::textPixelSize() const noexcept {
+    return fontSize_->value();
+}
+
 void AnnotationToolbar::refresh() {
     const bool annotationActive = document_ && interaction_;
     const bool contentAvailable = contentAvailable_ || annotationActive;
@@ -229,6 +255,9 @@ void AnnotationToolbar::refresh() {
                                 tool == AnnotationTool::Rectangle ||
                                 tool == AnnotationTool::Ellipse || tool == AnnotationTool::Arrow ||
                                 tool == AnnotationTool::Freehand);
+    const bool usesFontSize =
+        annotationActive && (tool == AnnotationTool::Text ||
+                             (tool == AnnotationTool::Select && selectedText));
 
     for (auto* button : {selectToolButton_, rectangleToolButton_, ellipseToolButton_,
                          arrowToolButton_, brushToolButton_, textToolButton_, mosaicToolButton_}) {
@@ -237,6 +266,7 @@ void AnnotationToolbar::refresh() {
     }
     colorButton_->setVisible(usesColor);
     lineWidth_->setVisible(usesLineWidth);
+    fontSize_->setVisible(usesFontSize);
     mosaicBlockSize_->setVisible(annotationActive &&
                                  (tool == AnnotationTool::Mosaic ||
                                   (tool == AnnotationTool::Select &&
@@ -255,8 +285,11 @@ void AnnotationToolbar::refresh() {
 
     if (annotationActive) {
         const QSignalBlocker lineWidthBlocker(lineWidth_);
+        const QSignalBlocker fontSizeBlocker(fontSize_);
         const QSignalBlocker mosaicBlocker(mosaicBlockSize_);
         lineWidth_->setValue(selectedStyle.value_or(interaction_->style()).physicalSize);
+        if (selectedText)
+            fontSize_->setValue(qMax(1, qRound(selectedStyle->physicalSize)));
         mosaicBlockSize_->setValue(selectedBlockSize.value_or(interaction_->mosaicBlockSize()));
         undoButton_->setEnabled(document_->canUndo() && !busy_);
         redoButton_->setEnabled(document_->canRedo() && !busy_);

@@ -19,8 +19,10 @@
 #include <QClipboard>
 #include <QCoreApplication>
 #include <QFileInfo>
+#include <QGuiApplication>
 #include <QMetaObject>
 #include <QRunnable>
+#include <QScreen>
 #include <QWheelEvent>
 
 #include <algorithm>
@@ -45,6 +47,8 @@ PinWindow::PinWindow(const PinId id, ChoosePinSavePath chooser, QWidget* parent)
 
     toolbar_ = new annotation::AnnotationToolbar(this);
     toolbar_->setObjectName(QStringLiteral("pinToolbar"));
+    toolbar_->setWindowFlags(Qt::Tool | Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint);
+    toolbar_->setAttribute(Qt::WA_QuitOnClose, false);
     toolbar_->setMode(annotation::AnnotationToolbarMode::Pin);
     toolbar_->hide();
     editAction_ = new QAction(tr("编辑"), this);
@@ -76,6 +80,18 @@ PinWindow::PinWindow(const PinId id, ChoosePinSavePath chooser, QWidget* parent)
             });
     connect(toolbar_, &annotation::AnnotationToolbar::annotationChanged, this,
             &PinWindow::refresh);
+    connect(toolbar_, &annotation::AnnotationToolbar::textSizeChanged, this,
+            [this](const int pixelSize) {
+                if (!textEditor_)
+                    return;
+                textEditStyle_.physicalSize = pixelSize;
+                if (textEditBefore_.has_value())
+                    std::get<annotation::TextAnnotation>(textEditBefore_->payload)
+                        .style.physicalSize = pixelSize;
+                textEditor_->setFont(annotation::resolvedAnnotationFont(pixelSize));
+                textEditor_->resize(
+                    240, qMax(40, textEditor_->fontMetrics().lineSpacing() * 2));
+            });
     connect(toolbar_, &annotation::AnnotationToolbar::undoRequested, this, [this] {
         if (document_ && document_->undo())
             refresh();
@@ -383,7 +399,8 @@ void PinWindow::beginTextEditor(QPointF anchor,
     textEditAnchor_ = anchor;
     textEditStyle_ = textEditBefore_.has_value()
                          ? std::get<annotation::TextAnnotation>(textEditBefore_->payload).style
-                         : annotation::AnnotationStyle{interaction_->style().color, 24.0};
+                         : annotation::AnnotationStyle{interaction_->style().color,
+                                                       static_cast<qreal>(toolbar_->textPixelSize())};
     auto* editor = new QPlainTextEdit(this);
     textEditor_ = editor;
     editor->setObjectName(QStringLiteral("annotationTextEditor"));
@@ -439,7 +456,9 @@ void PinWindow::editTextAt(QPointF point) {
             if (textEditor_)
                 return;
             interaction_->cancelDraft();
+            static_cast<void>(document_->select(*hit));
             beginTextEditor(std::get<annotation::TextAnnotation>(found->payload).anchor, *found);
+            refresh();
             return;
         }
     }
@@ -632,8 +651,22 @@ void PinWindow::positionToolbar() {
     if (!toolbar_->isVisible())
         return;
     toolbar_->adjustSize();
-    toolbar_->move(std::max(0, (width() - toolbar_->width()) / 2),
-                   std::max(0, height() - toolbar_->height() - 8));
+    const QRect pinRect = geometry_ ? geometry_->windowRect() : geometry();
+    QScreen* targetScreen = screen();
+    if (targetScreen == nullptr)
+        targetScreen = QGuiApplication::screenAt(pinRect.center());
+    const QRect available = targetScreen != nullptr ? targetScreen->availableGeometry() : pinRect;
+    const auto preferredX = pinRect.center().x() - toolbar_->width() / 2;
+    const auto maximumX = std::max(available.left(), available.right() - toolbar_->width() + 1);
+    const auto x = std::clamp(preferredX, available.left(), maximumX);
+    const auto below = pinRect.bottom() + 9;
+    const auto above = pinRect.top() - toolbar_->height() - 8;
+    const auto maximumY = std::max(available.top(), available.bottom() - toolbar_->height() + 1);
+    const auto y = below + toolbar_->height() - 1 <= available.bottom()
+                       ? below
+                       : (above >= available.top() ? above
+                                                   : std::clamp(below, available.top(), maximumY));
+    toolbar_->move(x, y);
     toolbar_->raise();
 }
 

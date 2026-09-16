@@ -18,6 +18,7 @@ using lc::annotation::AnnotationDocument;
 using lc::annotation::AnnotationInteraction;
 using lc::annotation::AnnotationTool;
 using lc::annotation::RectangleAnnotation;
+using lc::annotation::TextAnnotation;
 
 QImage testImage() {
     QImage image({80, 40}, QImage::Format_RGB32);
@@ -108,6 +109,35 @@ TEST_CASE("annotation toolbar reads the selected object's real style") {
     auto* lineWidth = toolbar.findChild<QDoubleSpinBox*>("lineWidthSpinBox");
     REQUIRE(lineWidth != nullptr);
     CHECK(lineWidth->value() == 9.0);
+}
+
+TEST_CASE("annotation toolbar exposes font size for new and selected text") {
+    auto& application = annotationTestApplication();
+    Q_UNUSED(application);
+    AnnotationDocument document(testImage());
+    AnnotationInteraction interaction(document);
+    interaction.setTool(AnnotationTool::Text);
+    AnnotationToolbar toolbar;
+
+    toolbar.setContentAvailable(true);
+    toolbar.setContext(&document, &interaction);
+
+    auto* fontSize = toolbar.findChild<QSpinBox*>("fontSizeSpinBox");
+    REQUIRE(fontSize != nullptr);
+    CHECK_FALSE(fontSize->isHidden());
+    CHECK(fontSize->value() == 24);
+
+    const auto id = document.addObject(TextAnnotation{{5, 6}, QStringLiteral("text"),
+                                                       {Qt::green, 18.0}});
+    REQUIRE(id.has_value());
+    REQUIRE(document.select(*id));
+    interaction.setTool(AnnotationTool::Select);
+    toolbar.refresh();
+    CHECK_FALSE(fontSize->isHidden());
+    CHECK(fontSize->value() == 18);
+
+    fontSize->setValue(42);
+    CHECK(std::get<TextAnnotation>(document.objects().front().payload).style.physicalSize == 42.0);
 }
 
 TEST_CASE("annotation toolbar emits host actions once and disables output while busy") {

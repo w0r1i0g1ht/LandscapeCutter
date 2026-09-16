@@ -73,6 +73,18 @@ SnipOverlay::SnipOverlay(FrozenMonitor monitor, SelectionModel& selection, QWidg
             });
     connect(toolbar_, &annotation::AnnotationToolbar::annotationChanged, this,
             &SnipOverlay::annotationChanged);
+    connect(toolbar_, &annotation::AnnotationToolbar::textSizeChanged, this,
+            [this](const int pixelSize) {
+                if (!textEditor_)
+                    return;
+                textEditStyle_.physicalSize = pixelSize;
+                if (textEditBefore_.has_value())
+                    std::get<annotation::TextAnnotation>(textEditBefore_->payload)
+                        .style.physicalSize = pixelSize;
+                textEditor_->setFont(annotation::resolvedAnnotationFont(pixelSize));
+                textEditor_->resize(
+                    240, qMax(40, textEditor_->fontMetrics().lineSpacing() * 2));
+            });
     connect(toolbar_, &annotation::AnnotationToolbar::undoRequested, this,
             &SnipOverlay::annotationUndoRequested);
     connect(toolbar_, &annotation::AnnotationToolbar::redoRequested, this,
@@ -145,7 +157,9 @@ void SnipOverlay::editTextEditor(const annotation::AnnotationId id) {
             cancelTextEditor();
         }
         cancelAnnotationGesture();
+        static_cast<void>(document_->select(id));
         beginTextEditor(std::get<annotation::TextAnnotation>(found->payload).anchor, *found);
+        refresh();
     }
 }
 
@@ -568,7 +582,8 @@ void SnipOverlay::beginTextEditor(QPointF anchor,
     textEditAnchor_ = anchor;
     textEditStyle_ = textEditBefore_.has_value()
                          ? std::get<annotation::TextAnnotation>(textEditBefore_->payload).style
-                         : annotation::AnnotationStyle{interaction_->style().color, 24.0};
+                         : annotation::AnnotationStyle{interaction_->style().color,
+                                                       static_cast<qreal>(toolbar_->textPixelSize())};
     auto* editor = new QPlainTextEdit(this);
     textEditor_ = editor;
     editor->setObjectName(QStringLiteral("annotationTextEditor"));

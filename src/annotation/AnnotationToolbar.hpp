@@ -26,6 +26,7 @@ class AnnotationToolbar final : public QWidget {
     void clearContext();
     void setBusy(bool busy);
     void refresh();
+    [[nodiscard]] int textPixelSize() const noexcept;
 
   signals:
     void toolRequested(AnnotationTool tool);
@@ -38,6 +39,7 @@ class AnnotationToolbar final : public QWidget {
     void pinRequested();
     void cancelRequested();
     void doneRequested();
+    void textSizeChanged(int pixelSize);
 
   private:
     AnnotationToolbarMode mode_{AnnotationToolbarMode::Snip};
@@ -60,6 +62,7 @@ class AnnotationToolbar final : public QWidget {
     QToolButton* cancelButton_{};
     QToolButton* doneButton_{};
     QDoubleSpinBox* lineWidth_{};
+    QSpinBox* fontSize_{};
     QSpinBox* mosaicBlockSize_{};
     bool contentAvailable_{};
     bool busy_{};

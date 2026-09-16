@@ -17,6 +17,7 @@
 #include <QWheelEvent>
 #include <QPlainTextEdit>
 #include <QPointer>
+#include <QSpinBox>
 #include <QTemporaryDir>
 #include <QThread>
 
@@ -150,8 +151,12 @@ TEST_CASE("pin window double click enters editing and shows the shared toolbar")
 
     CHECK(window->mode() == PinWindowMode::Editing);
     auto* done = window->findChild<QToolButton*>("doneButton");
+    auto* toolbar = window->findChild<QWidget*>("pinToolbar");
     REQUIRE(done != nullptr);
+    REQUIRE(toolbar != nullptr);
     CHECK_FALSE(done->isHidden());
+    CHECK(toolbar->isWindow());
+    CHECK(toolbar->width() > window->width());
 }
 
 TEST_CASE("pin window editing keeps history and returns to viewing on done") {
@@ -177,16 +182,23 @@ TEST_CASE("pin window commits nonempty text and keeps it editable") {
     REQUIRE(attachAt(*window, document).isEmpty());
     window->enterEditing();
     auto* text = window->findChild<QToolButton*>("textToolButton");
+    auto* fontSize = window->findChild<QSpinBox*>("fontSizeSpinBox");
     REQUIRE(text != nullptr);
+    REQUIRE(fontSize != nullptr);
     text->click();
+    CHECK_FALSE(fontSize->isHidden());
+    fontSize->setValue(42);
     QMouseEvent press{QEvent::MouseButtonPress, QPointF{10, 10}, QPointF{10, 10},
                       Qt::LeftButton, Qt::LeftButton, Qt::NoModifier};
     QApplication::sendEvent(window.get(), &press);
     auto* editor = window->findChild<QPlainTextEdit*>("annotationTextEditor");
     REQUIRE(editor != nullptr);
+    CHECK(editor->font().pixelSize() == 42);
     editor->setPlainText("editable");
     window->finishEditing();
     REQUIRE(window->document()->objects().size() == 1);
+    CHECK(std::get<lc::annotation::TextAnnotation>(window->document()->objects().front().payload)
+              .style.physicalSize == 42.0);
     CHECK(window->mode() == PinWindowMode::Viewing);
     window->enterEditing();
     CHECK(window->document()->objects().size() == 1);
@@ -247,9 +259,19 @@ TEST_CASE("pin window text double click edits text and blank double click finish
     window->enterEditing();
     sendMouse(*window, QEvent::MouseButtonDblClick, {12, 12}, {12, 12}, Qt::LeftButton,
               Qt::LeftButton);
-    REQUIRE(window->findChild<QPlainTextEdit*>("annotationTextEditor") != nullptr);
-    QKeyEvent escape{QEvent::KeyPress, Qt::Key_Escape, Qt::NoModifier};
-    QApplication::sendEvent(window.get(), &escape);
+    auto* editor = window->findChild<QPlainTextEdit*>("annotationTextEditor");
+    auto* fontSize = window->findChild<QSpinBox*>("fontSizeSpinBox");
+    REQUIRE(editor != nullptr);
+    REQUIRE(fontSize != nullptr);
+    CHECK_FALSE(fontSize->isHidden());
+    CHECK(fontSize->value() == 24);
+    fontSize->setValue(36);
+    CHECK(editor->font().pixelSize() == 36);
+    QKeyEvent commit{QEvent::KeyPress, Qt::Key_Return, Qt::ControlModifier};
+    QApplication::sendEvent(editor, &commit);
+    REQUIRE(window->findChild<QPlainTextEdit*>("annotationTextEditor") == nullptr);
+    CHECK(std::get<lc::annotation::TextAnnotation>(window->document()->objects().front().payload)
+              .style.physicalSize == 36.0);
     sendMouse(*window, QEvent::MouseButtonDblClick, {100, 70}, {100, 70}, Qt::LeftButton,
               Qt::LeftButton);
     CHECK(window->mode() == PinWindowMode::Viewing);
