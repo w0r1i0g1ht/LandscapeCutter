@@ -140,6 +140,27 @@ TEST_CASE("annotation toolbar exposes font size for new and selected text") {
     CHECK(std::get<TextAnnotation>(document.objects().front().payload).style.physicalSize == 42.0);
 }
 
+TEST_CASE("annotation toolbar reads selected text size while the text tool stays active") {
+    auto& application = annotationTestApplication();
+    Q_UNUSED(application);
+    AnnotationDocument document(testImage());
+    const auto id =
+        document.addObject(TextAnnotation{{5, 6}, QStringLiteral("text"), {Qt::green, 18.0}});
+    REQUIRE(id.has_value());
+    REQUIRE(document.select(*id));
+    AnnotationInteraction interaction(document);
+    interaction.setTool(AnnotationTool::Text);
+    AnnotationToolbar toolbar;
+
+    toolbar.setContentAvailable(true);
+    toolbar.setContext(&document, &interaction);
+
+    auto* fontSize = toolbar.findChild<QSpinBox*>("fontSizeSpinBox");
+    REQUIRE(fontSize != nullptr);
+    CHECK_FALSE(fontSize->isHidden());
+    CHECK(fontSize->value() == 18);
+}
+
 TEST_CASE("annotation toolbar emits host actions once and disables output while busy") {
     auto& application = annotationTestApplication();
     Q_UNUSED(application);

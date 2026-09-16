@@ -277,6 +277,29 @@ TEST_CASE("pin window text double click edits text and blank double click finish
     CHECK(window->mode() == PinWindowMode::Viewing);
 }
 
+TEST_CASE("pin text tool opens an existing text object without losing its font size") {
+    auto& application = annotationTestApplication();
+    Q_UNUSED(application);
+    auto window = std::make_unique<PinWindow>(18);
+    auto document = makeDocument({120, 80});
+    REQUIRE(document->addObject(
+                lc::annotation::TextAnnotation{{10, 10}, "text", {Qt::red, 24}})
+                .has_value());
+    REQUIRE(attachAt(*window, document).isEmpty());
+    window->enterEditing();
+    auto* text = window->findChild<QToolButton*>("textToolButton");
+    REQUIRE(text != nullptr);
+    text->click();
+
+    sendMouse(*window, QEvent::MouseButtonPress, {12, 12}, {12, 12}, Qt::LeftButton,
+              Qt::LeftButton);
+
+    REQUIRE(window->findChild<QPlainTextEdit*>("annotationTextEditor") != nullptr);
+    auto* fontSize = window->findChild<QSpinBox*>("fontSizeSpinBox");
+    REQUIRE(fontSize != nullptr);
+    CHECK(fontSize->value() == 24);
+}
+
 TEST_CASE("pin window non-text double click stays editing without creating text") {
     auto& application = annotationTestApplication();
     Q_UNUSED(application);

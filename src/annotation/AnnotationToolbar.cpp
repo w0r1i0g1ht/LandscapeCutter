@@ -246,6 +246,8 @@ void AnnotationToolbar::refresh() {
     const auto* selectedObject = selectedAnnotation(document_);
     const bool selectedText =
         selectedObject && std::holds_alternative<TextAnnotation>(selectedObject->payload);
+    const auto selectedTextStyle =
+        selectedText ? selectedAnnotationStyle(document_) : std::nullopt;
     const bool usesColor = annotationActive &&
                            ((tool == AnnotationTool::Select && selectedStyle.has_value()) ||
                             (tool != AnnotationTool::Select && tool != AnnotationTool::Mosaic));
@@ -288,8 +290,8 @@ void AnnotationToolbar::refresh() {
         const QSignalBlocker fontSizeBlocker(fontSize_);
         const QSignalBlocker mosaicBlocker(mosaicBlockSize_);
         lineWidth_->setValue(selectedStyle.value_or(interaction_->style()).physicalSize);
-        if (selectedText)
-            fontSize_->setValue(qMax(1, qRound(selectedStyle->physicalSize)));
+        if (selectedTextStyle.has_value())
+            fontSize_->setValue(qMax(1, qRound(selectedTextStyle->physicalSize)));
         mosaicBlockSize_->setValue(selectedBlockSize.value_or(interaction_->mosaicBlockSize()));
         undoButton_->setEnabled(document_->canUndo() && !busy_);
         redoButton_->setEnabled(document_->canRedo() && !busy_);
