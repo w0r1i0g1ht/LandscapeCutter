@@ -81,7 +81,9 @@ SnipOverlay::SnipOverlay(FrozenMonitor monitor, SelectionModel& selection, QWidg
                 if (textEditBefore_.has_value())
                     std::get<annotation::TextAnnotation>(textEditBefore_->payload)
                         .style.physicalSize = pixelSize;
-                textEditor_->setFont(annotation::resolvedAnnotationFont(pixelSize));
+                textEditor_->setFont(annotation::resolvedAnnotationFont(
+                    annotation::transformedTextPixelSize(textEditStyle_.physicalSize,
+                                                         documentToLocalTransform())));
                 textEditor_->resize(
                     240, qMax(40, textEditor_->fontMetrics().lineSpacing() * 2));
             });
@@ -588,7 +590,8 @@ void SnipOverlay::beginTextEditor(QPointF anchor,
     textEditor_ = editor;
     editor->setObjectName(QStringLiteral("annotationTextEditor"));
     editor->setLineWrapMode(QPlainTextEdit::NoWrap);
-    editor->setFont(annotation::resolvedAnnotationFont(qMax(1, qRound(textEditStyle_.physicalSize))));
+    editor->setFont(annotation::resolvedAnnotationFont(annotation::transformedTextPixelSize(
+        textEditStyle_.physicalSize, documentToLocalTransform())));
     editor->setPlainText(textEditBefore_.has_value()
                              ? std::get<annotation::TextAnnotation>(textEditBefore_->payload).text
                              : QString{});

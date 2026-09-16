@@ -99,6 +99,11 @@ TEST_CASE("annotation text font resolves through the required fallback chain") {
     CHECK_FALSE(font.italic());
 }
 
+TEST_CASE("annotation text display size follows the document transform") {
+    CHECK(transformedTextPixelSize(42.0, QTransform::fromScale(0.5, 0.5)) == 21);
+    CHECK(transformedTextPixelSize(24.0, QTransform::fromScale(2.0, 1.5)) == 36);
+}
+
 TEST_CASE("annotation text output starts at its baseline and matches fixed physical pixels") {
     static_cast<void>(annotationTestApplication());
     const TextAnnotation text{{16, 18}, QStringLiteral("Hi\nQt"), {Qt::red, 24}};

@@ -174,12 +174,12 @@ TEST_CASE("pin window editing keeps history and returns to viewing on done") {
     CHECK(window->mode() == PinWindowMode::Viewing);
 }
 
-TEST_CASE("pin window commits nonempty text and keeps it editable") {
+TEST_CASE("pin text editor matches the scaled rendered size and keeps text editable") {
     auto& application = annotationTestApplication();
     Q_UNUSED(application);
     auto window = std::make_unique<PinWindow>(6);
-    auto document = makeDocument({120, 80});
-    REQUIRE(attachAt(*window, document).isEmpty());
+    auto document = makeDocument({240, 160});
+    REQUIRE(window->attachDocument(document, {0, 0, 120, 80}).isEmpty());
     window->enterEditing();
     auto* text = window->findChild<QToolButton*>("textToolButton");
     auto* fontSize = window->findChild<QSpinBox*>("fontSizeSpinBox");
@@ -193,7 +193,7 @@ TEST_CASE("pin window commits nonempty text and keeps it editable") {
     QApplication::sendEvent(window.get(), &press);
     auto* editor = window->findChild<QPlainTextEdit*>("annotationTextEditor");
     REQUIRE(editor != nullptr);
-    CHECK(editor->font().pixelSize() == 42);
+    CHECK(editor->font().pixelSize() == 21);
     editor->setPlainText("editable");
     window->finishEditing();
     REQUIRE(window->document()->objects().size() == 1);

@@ -88,7 +88,9 @@ PinWindow::PinWindow(const PinId id, ChoosePinSavePath chooser, QWidget* parent)
                 if (textEditBefore_.has_value())
                     std::get<annotation::TextAnnotation>(textEditBefore_->payload)
                         .style.physicalSize = pixelSize;
-                textEditor_->setFont(annotation::resolvedAnnotationFont(pixelSize));
+                textEditor_->setFont(annotation::resolvedAnnotationFont(
+                    annotation::transformedTextPixelSize(textEditStyle_.physicalSize,
+                                                         documentToWindowTransform())));
                 textEditor_->resize(
                     240, qMax(40, textEditor_->fontMetrics().lineSpacing() * 2));
             });
@@ -405,7 +407,8 @@ void PinWindow::beginTextEditor(QPointF anchor,
     textEditor_ = editor;
     editor->setObjectName(QStringLiteral("annotationTextEditor"));
     editor->setLineWrapMode(QPlainTextEdit::NoWrap);
-    editor->setFont(annotation::resolvedAnnotationFont(qMax(1, qRound(textEditStyle_.physicalSize))));
+    editor->setFont(annotation::resolvedAnnotationFont(annotation::transformedTextPixelSize(
+        textEditStyle_.physicalSize, documentToWindowTransform())));
     editor->setPlainText(textEditBefore_.has_value()
                              ? std::get<annotation::TextAnnotation>(textEditBefore_->payload).text
                              : QString{});
