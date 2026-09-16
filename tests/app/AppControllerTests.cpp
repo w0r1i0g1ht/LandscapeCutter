@@ -25,7 +25,7 @@ TEST_CASE("controller honors the icon resource boundary when the tray is initial
     CHECK(availableResourceController.start());
 }
 
-TEST_CASE("the tray menu exposes capture before quit") {
+TEST_CASE("the tray menu exposes capture and close-all before quit") {
     int argc = 1;
     char applicationName[] = "landscapecutter_app_controller_menu_tests";
     char* argv[] = {applicationName, nullptr};
@@ -42,9 +42,37 @@ TEST_CASE("the tray menu exposes capture before quit") {
     REQUIRE(capture != nullptr);
     REQUIRE(menuObject != associated.cend());
     const auto* menu = qobject_cast<const QMenu*>(*menuObject);
-    REQUIRE(menu->actions().size() == 2);
+    auto* closeAllPins = controller.findChild<QAction*>("closeAllPinsAction");
+    REQUIRE(closeAllPins != nullptr);
+    REQUIRE(menu->actions().size() == 3);
     CHECK(menu->actions().at(0) == capture);
-    CHECK(menu->actions().at(1)->text() == QStringLiteral("退出"));
+    CHECK(menu->actions().at(1) == closeAllPins);
+    CHECK(menu->actions().at(2)->text() == QStringLiteral("退出"));
+}
+
+TEST_CASE("close-all pins action follows pin count and emits one request") {
+    int argc = 1;
+    char applicationName[] = "landscapecutter_app_controller_pin_tests";
+    char* argv[] = {applicationName, nullptr};
+    QApplication application(argc, argv);
+
+    lc::app::AppController controller(application);
+    auto* closeAllPins = controller.findChild<QAction*>("closeAllPinsAction");
+    REQUIRE(closeAllPins != nullptr);
+    CHECK_FALSE(closeAllPins->isEnabled());
+
+    controller.setPinCount(2);
+    CHECK(closeAllPins->isEnabled());
+    int requests{};
+    QObject::connect(&controller, &lc::app::AppController::closeAllPinsRequested,
+                     [&requests] { ++requests; });
+    closeAllPins->trigger();
+    CHECK(requests == 1);
+
+    controller.setPinCount(0);
+    CHECK_FALSE(closeAllPins->isEnabled());
+    closeAllPins->trigger();
+    CHECK(requests == 1);
 }
 
 TEST_CASE("capture availability enables and disables the capture action") {

@@ -1,6 +1,8 @@
 add_library(landscapecutter_app_core STATIC
     annotation/AnnotationPreparation.cpp
     annotation/AnnotationPreparation.hpp
+    annotation/AnnotationToolbar.cpp
+    annotation/AnnotationToolbar.hpp
     annotation/AnnotationDocument.cpp
     annotation/AnnotationDocument.hpp
     annotation/AnnotationHistory.cpp
@@ -10,6 +12,13 @@ add_library(landscapecutter_app_core STATIC
     annotation/AnnotationRenderer.cpp
     annotation/AnnotationRenderer.hpp
     annotation/AnnotationTypes.hpp
+    pin/PinGeometryModel.cpp
+    pin/PinGeometryModel.hpp
+    pin/PinManager.cpp
+    pin/PinManager.hpp
+    pin/PinTypes.hpp
+    pin/PinWindow.cpp
+    pin/PinWindow.hpp
     snip/SnipOverlay.cpp
     snip/SnipOverlay.hpp
     snip/SnipSession.cpp

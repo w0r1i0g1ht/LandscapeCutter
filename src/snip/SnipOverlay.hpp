@@ -18,14 +18,12 @@ class QMouseEvent;
 class QPaintEvent;
 class QResizeEvent;
 class QShowEvent;
-class QToolButton;
-class QDoubleSpinBox;
-class QSpinBox;
 class QPlainTextEdit;
 
 namespace lc::annotation {
 class AnnotationDocument;
 class AnnotationInteraction;
+class AnnotationToolbar;
 enum class AnnotationTool;
 }
 
@@ -52,6 +50,7 @@ class SnipOverlay final : public QWidget {
     void selectionChanged();
     void copyRequested();
     void saveRequested();
+    void pinRequested();
     void cancelRequested();
     void displayInvalidated();
     void annotationChanged();
@@ -91,27 +90,12 @@ class SnipOverlay final : public QWidget {
     void positionToolbar();
     void requestCopyIfSelected();
     void requestSaveIfSelected();
+    void requestPinIfSelected();
     [[nodiscard]] bool placeOnPhysicalMonitor();
 
     FrozenMonitor monitor_;
     SelectionModel& selection_;
-    QWidget* toolbar_{};
-    QToolButton* copyButton_{};
-    QToolButton* saveButton_{};
-    QToolButton* cancelButton_{};
-    QToolButton* selectToolButton_{};
-    QToolButton* rectangleToolButton_{};
-    QToolButton* ellipseToolButton_{};
-    QToolButton* arrowToolButton_{};
-    QToolButton* brushToolButton_{};
-    QToolButton* textToolButton_{};
-    QToolButton* mosaicToolButton_{};
-    QToolButton* colorButton_{};
-    QToolButton* undoButton_{};
-    QToolButton* redoButton_{};
-    QToolButton* deleteButton_{};
-    QDoubleSpinBox* lineWidth_{};
-    QSpinBox* mosaicBlockSize_{};
+    annotation::AnnotationToolbar* toolbar_{};
     annotation::AnnotationDocument* document_{};
     annotation::AnnotationInteraction* interaction_{};
     QPointer<QPlainTextEdit> textEditor_;

@@ -11,20 +11,100 @@
 #include "platform/windows/NativeMessageWindow.hpp"
 #include "platform/windows/SingleInstanceCoordinator.hpp"
 #include "platform/windows/WindowsDisplayTopologySource.hpp"
+#include "pin/PinManager.hpp"
 #include "snip/SnapshotReadback.hpp"
 #include "snip/SnipSession.hpp"
 
 #include <QApplication>
 #include <QCoreApplication>
+#include <QDateTime>
+#include <QFileDialog>
+#include <QFileInfo>
+#include <QGuiApplication>
 #include <QMessageBox>
+#include <QScreen>
+#include <QStandardPaths>
 #include <QTimer>
+#include <QtGui/qscreen_platform.h>
 
 #include <Windows.h>
 
 #include <winrt/base.h>
 
 #include <string_view>
+#include <limits>
 #include <vector>
+
+namespace {
+lc::pin::ChoosePinSavePath pinSavePathChooser() {
+    return [](std::function<void(QString)> accepted, std::function<void()> cancelled) {
+        auto* dialog = new QFileDialog(nullptr, QStringLiteral("保存贴图"));
+        dialog->setAttribute(Qt::WA_DeleteOnClose);
+        dialog->setAcceptMode(QFileDialog::AcceptSave);
+        dialog->setFileMode(QFileDialog::AnyFile);
+        dialog->setOption(QFileDialog::DontUseNativeDialog);
+        dialog->setNameFilters(
+            {QStringLiteral("PNG (*.png)"), QStringLiteral("JPEG (*.jpg *.jpeg)")});
+        dialog->setDefaultSuffix(QStringLiteral("png"));
+        dialog->setDirectory(QStandardPaths::writableLocation(QStandardPaths::PicturesLocation));
+        dialog->selectFile(QStringLiteral("LandscapeCutter-Pin-%1.png")
+                               .arg(QDateTime::currentDateTime().toString("yyyyMMdd-HHmmss")));
+        QObject::connect(dialog, &QFileDialog::filterSelected, dialog,
+                         [dialog](const QString& filter) {
+                             const QString suffix = filter.startsWith(QStringLiteral("JPEG"))
+                                                        ? QStringLiteral("jpg")
+                                                        : QStringLiteral("png");
+                             dialog->setDefaultSuffix(suffix);
+                             const auto files = dialog->selectedFiles();
+                             if (!files.isEmpty())
+                                 dialog->selectFile(QFileInfo(files.front()).completeBaseName() +
+                                                    '.' + suffix);
+                         });
+        QObject::connect(dialog, &QFileDialog::rejected, dialog,
+                         [cancelled = std::move(cancelled)] { cancelled(); });
+        QObject::connect(dialog, &QFileDialog::accepted, dialog,
+                         [dialog, accepted = std::move(accepted)] {
+                             const auto files = dialog->selectedFiles();
+                             accepted(files.isEmpty() ? QString{} : files.front());
+                         });
+        dialog->open();
+    };
+}
+
+QList<QRect> availableScreenGeometries() {
+    QList<QRect> geometries;
+    for (const auto* screen : QGuiApplication::screens()) {
+        if (screen != nullptr)
+            geometries.push_back(screen->availableGeometry());
+    }
+    return geometries;
+}
+
+QList<lc::pin::PinScreenGeometry> pinScreenGeometries(
+    const std::vector<lc::platform::windows::MonitorDescriptor>& monitors) {
+    QList<lc::pin::PinScreenGeometry> geometries;
+    for (const auto& monitor : monitors) {
+        const auto physicalWidth = lc::platform::width(monitor.desktopRect);
+        const auto physicalHeight = lc::platform::height(monitor.desktopRect);
+        if (physicalWidth <= 0 || physicalHeight <= 0 ||
+            physicalWidth > std::numeric_limits<int>::max() ||
+            physicalHeight > std::numeric_limits<int>::max()) {
+            continue;
+        }
+        for (QScreen* screen : QGuiApplication::screens()) {
+            const auto* native = screen->nativeInterface<QNativeInterface::QWindowsScreen>();
+            if (native == nullptr || native->handle() != monitor.nativeHandle)
+                continue;
+            geometries.push_back(
+                {{monitor.desktopRect.left, monitor.desktopRect.top,
+                  static_cast<int>(physicalWidth), static_cast<int>(physicalHeight)},
+                 screen->geometry(), screen->availableGeometry()});
+            break;
+        }
+    }
+    return geometries;
+}
+} // namespace
 
 int main(int argc, char* argv[]) {
     std::vector<std::string_view> arguments;
@@ -99,9 +179,22 @@ int main(int argc, char* argv[]) {
     });
     lc::snip::SnapshotReadback readback(deviceManager);
     lc::snip::SnapshotBatch batch(captureService, deviceManager, readback.function());
-    lc::snip::SnipSession snipSession(batch);
+    lc::pin::PinManager pinManager({}, pinSavePathChooser(),
+                                   [&catalog] { return pinScreenGeometries(catalog.monitors()); });
+    lc::snip::SnipSession snipSession(
+        batch, {}, {},
+        [&pinManager](std::unique_ptr<lc::annotation::AnnotationDocument>& document,
+                      const QRect physicalSelection) {
+            return pinManager.create(std::move(document), physicalSelection);
+        });
     QObject::connect(&snipSession, &lc::snip::SnipSession::errorOccurred, &controller,
                      &lc::app::AppController::showErrorMessage);
+    QObject::connect(&pinManager, &lc::pin::PinManager::errorOccurred, &controller,
+                     &lc::app::AppController::showErrorMessage);
+    QObject::connect(&pinManager, &lc::pin::PinManager::countChanged, &controller,
+                     &lc::app::AppController::setPinCount);
+    QObject::connect(&controller, &lc::app::AppController::closeAllPinsRequested, &pinManager,
+                     &lc::pin::PinManager::closeAll);
     QObject::connect(&batch, &lc::snip::SnapshotBatch::failed, &coordinator,
                      [&coordinator](lc::app::CaptureNoticeCode code) {
                          if (code == lc::app::CaptureNoticeCode::DeviceRecoveryFailed ||
@@ -175,11 +268,13 @@ int main(int argc, char* argv[]) {
     QObject::connect(
         &refreshTimer, &QTimer::timeout, &controller,
         [&catalog, &controller, &coordinator, &hotkey, &runtimeState, &applyRuntimeState,
-         &snipSession] {
+         &snipSession, &pinManager] {
             snipSession.cancel();
             const bool refreshed =
                 std::holds_alternative<std::vector<lc::platform::windows::MonitorDescriptor>>(
                     catalog.refresh());
+            if (refreshed)
+                pinManager.recoverVisibility(availableScreenGeometries());
             runtimeState =
                 lc::app::CaptureRuntimePolicy::afterDisplayRefresh(runtimeState, refreshed);
             const bool needsHotkeyRegistration = runtimeState.registerHotkey;
@@ -197,8 +292,9 @@ int main(int argc, char* argv[]) {
             }
         });
     QObject::connect(&application, &QCoreApplication::aboutToQuit, &application,
-                     [&coordinator, &hotkey, &snipSession] {
+                     [&coordinator, &hotkey, &snipSession, &pinManager] {
                          snipSession.cancel();
+                         pinManager.closeAll();
                          coordinator.shutdown();
                          hotkey.unregister();
                      });

@@ -7,12 +7,16 @@ LandscapeCutter 正在从 Python 原型重构为 C++20 与 Qt 6。项目将先�
 
 ## 当前状态
 
-**里程碑 0、里程碑 1 和里程碑 2 已完成。** 当前仓库已经切换到 C++/Qt 工程，
+**里程碑 0 至里程碑 4 的功能实现和安全自动验证已完成。** 当前仓库已经切换到 C++/Qt 工程，
 具备可复现的构建环境、自动测试和可运行的 Windows 系统托盘程序。
 
 当前版本按 F2 会先冻结全部显示器，再显示矩形选区。选区支持创建、移动和八方向缩放；进入标注
 后可使用矩形、椭圆、箭头、画笔、文字和马赛克，并可撤销、重做、复制或保存为 PNG/JPEG。自动测试
 覆盖离屏多显示器拼接、标注导出和会话清理；真实多显示器、混合 DPI 与 HDR 硬件仍需补充人工验收。
+
+选区或标注结果还可以创建多个无边框置顶贴图。贴图可独立移动、缩放、调节透明度、复制、保存，
+并能重新打开标注工具栏继续编辑。由于当前开发机曾发生显存管理蓝屏，里程碑 4 的真实桌面人工
+验收暂缓；完成情况和安全边界见里程碑 4 执行进度。
 
 已经完成并验证的基础能力：
 
@@ -30,8 +34,9 @@ LandscapeCutter 正在从 Python 原型重构为 C++20 与 Qt 6。项目将先�
 - [x] **里程碑 1：Windows 图形基础**——D3D11、Windows Graphics Capture、显示器模型、
   Per-Monitor V2 DPI、全局快捷键和单实例；自动、真实桌面与人工验收均已完成。
 - [x] **里程碑 2：静态截图闭环**——冻结多显示器快照、矩形选区、复制和图片保存；自动、真实桌面与当前环境人工验收均已完成。
-- [ ] **里程碑 3：标注系统**——六类工具与统一输出已完成自动验证，等待人工验收。
-- [ ] **里程碑 4：静态贴图**——多个无边框置顶贴图及拖动、缩放和透明度控制。
+- [x] **里程碑 3：标注系统**——六类工具、属性编辑、撤销重做和统一输出已完成自动与人工验收。
+- [x] **里程碑 4：静态贴图**——多个无边框置顶贴图、继续编辑、导出及生命周期管理；
+  安全自动验证已完成，真实桌面人工验收因当前机器 GPU 风险暂缓。
 - [ ] **里程碑 5：实时区域贴图**——目标窗口相对选区、GPU 裁剪和实时显示。
 - [ ] **里程碑 6：产品化**——设置、快捷键配置、日志、安装包、便携包和兼容性测试。
 
@@ -74,6 +79,10 @@ ctest --preset windows-msvc-debug-desktop --output-on-failure
 Graphics Capture 与 session 关闭后 readback 验收。由于默认测试包含隔离的 vcpkg checkout 行为验证，
 测试通常需要约 1–2 分钟。
 
+当前开发机在 2026-09-14 曾发生 `VIDEO_MEMORY_MANAGEMENT_INTERNAL (0x0000010E)`。在完成独立转储
+分析前，里程碑 4 只运行明确列出的纯逻辑和 `QT_QPA_PLATFORM=offscreen` 目标，不运行上述完整
+preset、D3D/WGC 测试或真实桌面捕获。
+
 ## 运行
 
 ```powershell
@@ -93,6 +102,13 @@ Graphics Capture 与 session 关闭后 readback 验收。由于默认测试包�
 提交、Esc 放弃当前编辑；马赛克块大小可设为 1–128 像素，默认 12。Ctrl+Z/Ctrl+Y 可撤销或重做，
 导出的剪贴板和 PNG 保留 RGB32 像素，JPEG 使用质量 90。
 
+点击截图工具栏的“贴图”会把当前选区或带标注截图变成独立置顶窗口。贴图的操作方式如下：
+
+- 左键拖动移动贴图，滚轮以光标位置为中心等比例缩放，`Ctrl + 滚轮` 以 5% 步进调节透明度；
+- 双击贴图进入标注编辑，使用“完成”、双击未命中标注的空白处或在无草稿时按 Esc 返回普通状态；
+- 右键可编辑、复制、另存为、恢复原始大小、恢复不透明或关闭当前贴图；
+- 托盘菜单“关闭全部贴图”会关闭当前所有贴图，并只在存在贴图时启用。
+
 ## Python 原型
 
 最终 Python 原型保存在带注释的 Git 标签 `python-prototype-final` 中。主分支只保留迁移说明，
@@ -107,6 +123,12 @@ Graphics Capture 与 session 关闭后 readback 验收。由于默认测试包�
 - [里程碑 2 详细设计](docs/superpowers/specs/2026-09-08-milestone-2-static-snip-design.md)
 - [里程碑 2 实施计划](docs/superpowers/plans/2026-09-08-milestone-2-static-snip.md)
 - [里程碑 2 执行进度](docs/superpowers/progress/2026-09-09-milestone-2-progress.md)
+- [里程碑 3 详细设计](docs/superpowers/specs/2026-09-09-milestone-3-annotation-system-design.md)
+- [里程碑 3 实施计划](docs/superpowers/plans/2026-09-09-milestone-3-annotation-system.md)
+- [里程碑 3 执行进度](docs/superpowers/progress/2026-09-09-milestone-3-progress.md)
+- [里程碑 4 详细设计](docs/superpowers/specs/2026-09-14-milestone-4-static-pins-design.md)
+- [里程碑 4 实施计划](docs/superpowers/plans/2026-09-14-milestone-4-static-pins.md)
+- [里程碑 4 执行进度](docs/superpowers/progress/2026-09-14-milestone-4-progress.md)
 - [后续体验与外观优化计划](docs/superpowers/plans/2026-09-09-experience-and-appearance-backlog.md)
 
 ## 许可证

@@ -13,6 +13,8 @@ namespace lc::annotation {
 
 [[nodiscard]] QPolygonF arrowHead(QPointF start, QPointF end, qreal width);
 [[nodiscard]] QFont resolvedAnnotationFont(int physicalPixelSize);
+[[nodiscard]] int transformedTextPixelSize(qreal physicalPixelSize,
+                                           const QTransform& documentToTarget) noexcept;
 [[nodiscard]] QRectF textLogicalRect(const TextAnnotation& text);
 
 void drawAnnotations(QPainter& painter, const AnnotationSnapshot& snapshot,

@@ -3,27 +3,23 @@
 #include "annotation/AnnotationDocument.hpp"
 #include "annotation/AnnotationInteraction.hpp"
 #include "annotation/AnnotationRenderer.hpp"
+#include "annotation/AnnotationToolbar.hpp"
 
 #include <QCloseEvent>
-#include <QColorDialog>
-#include <QDoubleSpinBox>
+#include <QFrame>
 #include <QGuiApplication>
-#include <QHBoxLayout>
 #include <QKeyEvent>
 #include <QMouseEvent>
 #include <QPainter>
 #include <QPainterPath>
 #include <QPlainTextEdit>
-#include <QSpinBox>
 #include <QResizeEvent>
 #include <QScreen>
-#include <QSignalBlocker>
 #include <QShowEvent>
+#include <QTextDocument>
 #include <QTimer>
-#include <QToolButton>
 #include <algorithm>
 #include <array>
-#include <type_traits>
 
 #ifdef Q_OS_WIN
 #include <QtGui/qscreen_platform.h>
@@ -43,44 +39,6 @@ constexpr int kToolbarMargin = 8;
 [[nodiscard]] QRectF localMonitorRect(const QSize& localSize) {
     return {0.0, 0.0, static_cast<qreal>(localSize.width()),
             static_cast<qreal>(localSize.height())};
-}
-
-[[nodiscard]] const annotation::AnnotationObject*
-selectedAnnotation(const annotation::AnnotationDocument* document) {
-    if (!document || !document->selectedId().has_value())
-        return nullptr;
-    const auto selectedId = *document->selectedId();
-    const auto found = std::find_if(document->objects().begin(), document->objects().end(),
-                                    [selectedId](const auto& object) {
-                                        return object.id == selectedId;
-                                    });
-    return found == document->objects().end() ? nullptr : &*found;
-}
-
-[[nodiscard]] std::optional<annotation::AnnotationStyle>
-selectedAnnotationStyle(const annotation::AnnotationDocument* document) {
-    const auto* object = selectedAnnotation(document);
-    if (!object)
-        return std::nullopt;
-    return std::visit(
-        [](const auto& value) -> std::optional<annotation::AnnotationStyle> {
-            using Value = std::decay_t<decltype(value)>;
-            if constexpr (std::is_same_v<Value, annotation::MosaicAnnotation>)
-                return std::nullopt;
-            else
-                return value.style;
-        },
-        object->payload);
-}
-
-[[nodiscard]] std::optional<int>
-selectedMosaicBlockSize(const annotation::AnnotationDocument* document) {
-    const auto* object = selectedAnnotation(document);
-    if (!object)
-        return std::nullopt;
-    if (const auto* mosaic = std::get_if<annotation::MosaicAnnotation>(&object->payload))
-        return mosaic->blockSize;
-    return std::nullopt;
 }
 } // namespace
 
@@ -106,207 +64,59 @@ SnipOverlay::SnipOverlay(FrozenMonitor monitor, SelectionModel& selection, QWidg
     resize(qMax(1, qRound(monitor_.geometry.width() / ratio)),
            qMax(1, qRound(monitor_.geometry.height() / ratio)));
 
-    toolbar_ = new QWidget(this);
+    toolbar_ = new annotation::AnnotationToolbar(this);
     toolbar_->setObjectName(QStringLiteral("snipToolbar"));
-    auto* layout = new QHBoxLayout(toolbar_);
-    layout->setContentsMargins(4, 4, 4, 4);
-    layout->setSpacing(4);
-
-    const auto addTool = [this, layout](const QString& objectName, const QString& text,
-                                        annotation::AnnotationTool tool) {
-        auto* button = new QToolButton(toolbar_);
-        button->setObjectName(objectName);
-        button->setText(text);
-        button->setCheckable(true);
-        button->setAutoExclusive(true);
-        button->setFocusPolicy(Qt::NoFocus);
-        layout->addWidget(button);
-        connect(button, &QToolButton::clicked, this,
-                [this, tool] {
-                    if (textEditor_ && interaction_ && tool != interaction_->tool())
-                        commitTextEditor();
-                    if (document_ && tool != annotation::AnnotationTool::Select)
-                        document_->clearSelection();
-                    emit annotationToolRequested(tool);
-                });
-        return button;
-    };
-    selectToolButton_ =
-        addTool(QStringLiteral("selectToolButton"), tr("编辑"), annotation::AnnotationTool::Select);
-    rectangleToolButton_ = addTool(QStringLiteral("rectangleToolButton"), tr("矩形"),
-                                   annotation::AnnotationTool::Rectangle);
-    ellipseToolButton_ =
-        addTool(QStringLiteral("ellipseToolButton"), tr("椭圆"), annotation::AnnotationTool::Ellipse);
-    arrowToolButton_ =
-        addTool(QStringLiteral("arrowToolButton"), tr("箭头"), annotation::AnnotationTool::Arrow);
-    brushToolButton_ = addTool(QStringLiteral("brushToolButton"), tr("画笔"),
-                               annotation::AnnotationTool::Freehand);
-    textToolButton_ = addTool(QStringLiteral("textToolButton"), tr("文字"),
-                              annotation::AnnotationTool::Text);
-    mosaicToolButton_ = addTool(QStringLiteral("mosaicToolButton"), tr("马赛克"),
-                                annotation::AnnotationTool::Mosaic);
-    selectToolButton_->setToolTip(tr("选择、移动或调整已有标注"));
-    rectangleToolButton_->setToolTip(tr("绘制矩形标注"));
-    ellipseToolButton_->setToolTip(tr("绘制椭圆标注"));
-    arrowToolButton_->setToolTip(tr("绘制箭头标注"));
-    brushToolButton_->setToolTip(tr("自由绘制标注"));
-    textToolButton_->setToolTip(tr("添加文字标注"));
-    mosaicToolButton_->setToolTip(tr("对区域添加马赛克"));
-    colorButton_ = new QToolButton(toolbar_);
-    colorButton_->setObjectName(QStringLiteral("colorButton"));
-    colorButton_->setText(tr("颜色"));
-    colorButton_->setToolTip(tr("设置标注颜色"));
-    colorButton_->setFocusPolicy(Qt::NoFocus);
-    layout->addWidget(colorButton_);
-    connect(colorButton_, &QToolButton::clicked, this, [this] {
-        if (!interaction_)
-            return;
-        const auto selectedStyle = interaction_->tool() == annotation::AnnotationTool::Select
-                                       ? selectedAnnotationStyle(document_)
-                                       : std::nullopt;
-        const auto color = QColorDialog::getColor(
-            selectedStyle.value_or(interaction_->style()).color, this, tr("选择颜色"));
-        if (color.isValid()) {
-            auto style = selectedStyle.value_or(interaction_->style());
-            style.color = color;
-            interaction_->setStyle(style);
-            emit annotationChanged();
-        }
-    });
-    lineWidth_ = new QDoubleSpinBox(toolbar_);
-    lineWidth_->setObjectName(QStringLiteral("lineWidthSpinBox"));
-    lineWidth_->setRange(1.0, 64.0);
-    lineWidth_->setValue(3.0);
-    lineWidth_->setDecimals(1);
-    lineWidth_->setPrefix(tr("线宽 "));
-    lineWidth_->setSuffix(tr(" px"));
-    lineWidth_->setToolTip(tr("矩形、椭圆、箭头和画笔的线条宽度"));
-    lineWidth_->setFocusPolicy(Qt::NoFocus);
-    layout->addWidget(lineWidth_);
-    connect(lineWidth_, &QDoubleSpinBox::valueChanged, this, [this](double width) {
-        if (!interaction_)
-            return;
-        const auto selectedStyle = interaction_->tool() == annotation::AnnotationTool::Select
-                                       ? selectedAnnotationStyle(document_)
-                                       : std::nullopt;
-        auto style = selectedStyle.value_or(interaction_->style());
-        style.physicalSize = width;
-        interaction_->setStyle(style);
-        emit annotationChanged();
-    });
-    mosaicBlockSize_ = new QSpinBox(toolbar_);
-    mosaicBlockSize_->setObjectName(QStringLiteral("mosaicBlockSizeSpinBox"));
-    mosaicBlockSize_->setRange(1, 128);
-    mosaicBlockSize_->setValue(12);
-    mosaicBlockSize_->setPrefix(tr("块大小 "));
-    mosaicBlockSize_->setSuffix(tr(" px"));
-    mosaicBlockSize_->setToolTip(tr("马赛克像素块的大小"));
-    mosaicBlockSize_->setFocusPolicy(Qt::NoFocus);
-    layout->addWidget(mosaicBlockSize_);
-    connect(mosaicBlockSize_, &QSpinBox::valueChanged, this, [this](int blockSize) {
-        if (interaction_)
-            interaction_->setMosaicBlockSize(blockSize);
-    });
-    const auto addAction = [this, layout](const QString& objectName, const QString& text,
-                                          auto signal) {
-        auto* button = new QToolButton(toolbar_);
-        button->setObjectName(objectName);
-        button->setText(text);
-        button->setFocusPolicy(Qt::NoFocus);
-        layout->addWidget(button);
-        connect(button, &QToolButton::clicked, this, signal);
-        return button;
-    };
-    undoButton_ = addAction(QStringLiteral("undoButton"), tr("撤销"), &SnipOverlay::annotationUndoRequested);
-    redoButton_ = addAction(QStringLiteral("redoButton"), tr("重做"), &SnipOverlay::annotationRedoRequested);
-    deleteButton_ = addAction(QStringLiteral("deleteButton"), tr("删除"), &SnipOverlay::annotationDeleteRequested);
-
-    copyButton_ = new QToolButton(toolbar_);
-    copyButton_->setObjectName(QStringLiteral("copyButton"));
-    copyButton_->setFocusPolicy(Qt::NoFocus);
-    copyButton_->setText(tr("复制"));
-    layout->addWidget(copyButton_);
-
-    saveButton_ = new QToolButton(toolbar_);
-    saveButton_->setObjectName(QStringLiteral("saveButton"));
-    saveButton_->setFocusPolicy(Qt::NoFocus);
-    saveButton_->setText(tr("保存"));
-    layout->addWidget(saveButton_);
-
-    cancelButton_ = new QToolButton(toolbar_);
-    cancelButton_->setObjectName(QStringLiteral("cancelButton"));
-    cancelButton_->setFocusPolicy(Qt::NoFocus);
-    cancelButton_->setText(tr("取消"));
-    layout->addWidget(cancelButton_);
-
-    connect(copyButton_, &QToolButton::clicked, this, &SnipOverlay::requestCopyIfSelected);
-    connect(saveButton_, &QToolButton::clicked, this, &SnipOverlay::requestSaveIfSelected);
-    connect(cancelButton_, &QToolButton::clicked, this, &SnipOverlay::cancelRequested);
+    toolbar_->setMode(annotation::AnnotationToolbarMode::Snip);
+    connect(toolbar_, &annotation::AnnotationToolbar::toolRequested, this,
+            [this](annotation::AnnotationTool tool) {
+                if (textEditor_ && interaction_ && tool != interaction_->tool())
+                    commitTextEditor();
+                emit annotationToolRequested(tool);
+            });
+    connect(toolbar_, &annotation::AnnotationToolbar::annotationChanged, this,
+            &SnipOverlay::annotationChanged);
+    connect(toolbar_, &annotation::AnnotationToolbar::textSizeChanged, this,
+            [this](const int pixelSize) {
+                if (!textEditor_)
+                    return;
+                textEditStyle_.physicalSize = pixelSize;
+                if (textEditBefore_.has_value())
+                    std::get<annotation::TextAnnotation>(textEditBefore_->payload)
+                        .style.physicalSize = pixelSize;
+                textEditor_->setFont(annotation::resolvedAnnotationFont(
+                    annotation::transformedTextPixelSize(textEditStyle_.physicalSize,
+                                                         documentToLocalTransform())));
+                textEditor_->resize(
+                    240, qMax(40, textEditor_->fontMetrics().lineSpacing() * 2));
+            });
+    connect(toolbar_, &annotation::AnnotationToolbar::undoRequested, this,
+            &SnipOverlay::annotationUndoRequested);
+    connect(toolbar_, &annotation::AnnotationToolbar::redoRequested, this,
+            &SnipOverlay::annotationRedoRequested);
+    connect(toolbar_, &annotation::AnnotationToolbar::deleteRequested, this,
+            &SnipOverlay::annotationDeleteRequested);
+    connect(toolbar_, &annotation::AnnotationToolbar::copyRequested, this,
+            &SnipOverlay::requestCopyIfSelected);
+    connect(toolbar_, &annotation::AnnotationToolbar::saveRequested, this,
+            &SnipOverlay::requestSaveIfSelected);
+    connect(toolbar_, &annotation::AnnotationToolbar::pinRequested, this,
+            &SnipOverlay::requestPinIfSelected);
+    connect(toolbar_, &annotation::AnnotationToolbar::cancelRequested, this,
+            &SnipOverlay::cancelRequested);
     refresh();
 }
 
 void SnipOverlay::refresh() {
     const bool annotationActive = annotating();
     const bool selected = hasSelection();
-    copyButton_->setEnabled((selected || annotationActive) && !busy_);
-    saveButton_->setEnabled((selected || annotationActive) && !busy_);
-    cancelButton_->setEnabled(true);
+    toolbar_->setContentAvailable(selected || annotationActive);
+    toolbar_->setBusy(busy_);
+    if (annotationActive)
+        toolbar_->setContext(document_, interaction_);
+    else
+        toolbar_->clearContext();
     const bool ownToolbar = ownsToolbar();
     toolbar_->setVisible((selected || annotationActive) && ownToolbar);
-    const bool toolPickerAvailable = selected || annotationActive;
-    selectToolButton_->setVisible(toolPickerAvailable);
-    rectangleToolButton_->setVisible(toolPickerAvailable);
-    ellipseToolButton_->setVisible(toolPickerAvailable);
-    arrowToolButton_->setVisible(toolPickerAvailable);
-    brushToolButton_->setVisible(toolPickerAvailable);
-    textToolButton_->setVisible(toolPickerAvailable);
-    mosaicToolButton_->setVisible(toolPickerAvailable);
-    const auto tool = annotationActive ? interaction_->tool() : annotation::AnnotationTool::Select;
-    const auto selectedStyle = annotationActive && tool == annotation::AnnotationTool::Select
-                                   ? selectedAnnotationStyle(document_)
-                                   : std::nullopt;
-    const auto selectedBlockSize = annotationActive && tool == annotation::AnnotationTool::Select
-                                       ? selectedMosaicBlockSize(document_)
-                                       : std::nullopt;
-    const auto* selectedObject = selectedAnnotation(document_);
-    const bool selectedText =
-        selectedObject && std::holds_alternative<annotation::TextAnnotation>(selectedObject->payload);
-    const bool usesColor = annotationActive &&
-                           ((tool == annotation::AnnotationTool::Select && selectedStyle.has_value()) ||
-                            (tool != annotation::AnnotationTool::Select &&
-                             tool != annotation::AnnotationTool::Mosaic));
-    const bool usesLineWidth = annotationActive &&
-                               ((tool == annotation::AnnotationTool::Select &&
-                                 selectedStyle.has_value() && !selectedText) ||
-                                tool == annotation::AnnotationTool::Rectangle ||
-                                tool == annotation::AnnotationTool::Ellipse ||
-                                tool == annotation::AnnotationTool::Arrow ||
-                                tool == annotation::AnnotationTool::Freehand);
-    colorButton_->setVisible(usesColor);
-    lineWidth_->setVisible(usesLineWidth);
-    mosaicBlockSize_->setVisible(annotationActive &&
-                                 (tool == annotation::AnnotationTool::Mosaic ||
-                                  (tool == annotation::AnnotationTool::Select &&
-                                   selectedBlockSize.has_value())));
-    undoButton_->setVisible(annotationActive);
-    redoButton_->setVisible(annotationActive);
-    deleteButton_->setVisible(annotationActive);
-    if (annotationActive) {
-        selectToolButton_->setChecked(tool == annotation::AnnotationTool::Select);
-        rectangleToolButton_->setChecked(tool == annotation::AnnotationTool::Rectangle);
-        ellipseToolButton_->setChecked(tool == annotation::AnnotationTool::Ellipse);
-        arrowToolButton_->setChecked(tool == annotation::AnnotationTool::Arrow);
-        brushToolButton_->setChecked(tool == annotation::AnnotationTool::Freehand);
-        textToolButton_->setChecked(tool == annotation::AnnotationTool::Text);
-        mosaicToolButton_->setChecked(tool == annotation::AnnotationTool::Mosaic);
-        const QSignalBlocker lineWidthBlocker(lineWidth_);
-        const QSignalBlocker mosaicBlocker(mosaicBlockSize_);
-        lineWidth_->setValue(selectedStyle.value_or(interaction_->style()).physicalSize);
-        mosaicBlockSize_->setValue(selectedBlockSize.value_or(interaction_->mosaicBlockSize()));
-        undoButton_->setEnabled(document_->canUndo() && !busy_);
-        redoButton_->setEnabled(document_->canRedo() && !busy_);
-        deleteButton_->setEnabled(document_->selectedId().has_value() && !busy_);
-    }
     positionToolbar();
     update();
 }
@@ -335,23 +145,28 @@ bool SnipOverlay::isToolbarHost() const noexcept {
 }
 
 void SnipOverlay::createTextEditor(QPointF anchor) {
+    if (textEditor_) {
+        commitTextEditor();
+        return;
+    }
     beginTextEditor(anchor);
 }
 
 void SnipOverlay::editTextEditor(const annotation::AnnotationId id) {
     if (!annotating() || !ownsToolbar())
         return;
+    if (textEditor_) {
+        commitTextEditor();
+        return;
+    }
     const auto found = std::find_if(document_->objects().begin(), document_->objects().end(),
                                     [id](const auto& object) { return object.id == id; });
     if (found != document_->objects().end() &&
         std::holds_alternative<annotation::TextAnnotation>(found->payload)) {
-        if (textEditor_) {
-            if (textEditBefore_.has_value() || !textEditor_->toPlainText().trimmed().isEmpty())
-                return;
-            cancelTextEditor();
-        }
         cancelAnnotationGesture();
+        static_cast<void>(document_->select(id));
         beginTextEditor(std::get<annotation::TextAnnotation>(found->payload).anchor, *found);
+        refresh();
     }
 }
 
@@ -541,6 +356,12 @@ void SnipOverlay::mousePressEvent(QMouseEvent* event) {
         return;
     }
 
+    if (annotating() && textEditor_) {
+        commitTextEditor();
+        event->accept();
+        return;
+    }
+
     if (annotating() && interaction_->tool() == annotation::AnnotationTool::Text) {
         const auto hit = interaction_->hitTest(annotationPoint(event));
         const auto found = hit.has_value()
@@ -560,11 +381,6 @@ void SnipOverlay::mousePressEvent(QMouseEvent* event) {
             else
                 emit annotationTextCreateRequested(annotationPoint(event));
         }
-        event->accept();
-        return;
-    }
-
-    if (annotating() && textEditor_) {
         event->accept();
         return;
     }
@@ -774,12 +590,17 @@ void SnipOverlay::beginTextEditor(QPointF anchor,
     textEditAnchor_ = anchor;
     textEditStyle_ = textEditBefore_.has_value()
                          ? std::get<annotation::TextAnnotation>(textEditBefore_->payload).style
-                         : annotation::AnnotationStyle{interaction_->style().color, 24.0};
+                         : annotation::AnnotationStyle{interaction_->style().color,
+                                                       static_cast<qreal>(toolbar_->textPixelSize())};
     auto* editor = new QPlainTextEdit(this);
     textEditor_ = editor;
     editor->setObjectName(QStringLiteral("annotationTextEditor"));
+    editor->setFrameShape(QFrame::NoFrame);
+    editor->setContentsMargins(0, 0, 0, 0);
+    editor->document()->setDocumentMargin(0.0);
     editor->setLineWrapMode(QPlainTextEdit::NoWrap);
-    editor->setFont(annotation::resolvedAnnotationFont(qMax(1, qRound(textEditStyle_.physicalSize))));
+    editor->setFont(annotation::resolvedAnnotationFont(annotation::transformedTextPixelSize(
+        textEditStyle_.physicalSize, documentToLocalTransform())));
     editor->setPlainText(textEditBefore_.has_value()
                              ? std::get<annotation::TextAnnotation>(textEditBefore_->payload).text
                              : QString{});
@@ -868,6 +689,14 @@ void SnipOverlay::requestSaveIfSelected() {
         if (textEditor_)
             commitTextEditor();
         emit saveRequested();
+    }
+}
+
+void SnipOverlay::requestPinIfSelected() {
+    if ((hasSelection() || annotating()) && !busy_) {
+        if (textEditor_)
+            commitTextEditor();
+        emit pinRequested();
     }
 }
 

@@ -154,6 +154,16 @@ QFont resolvedAnnotationFont(int physicalPixelSize) {
     return font;
 }
 
+int transformedTextPixelSize(const qreal physicalPixelSize,
+                             const QTransform& documentToTarget) noexcept {
+    const auto verticalScale = std::hypot(documentToTarget.m21(), documentToTarget.m22());
+    const auto transformed = physicalPixelSize * verticalScale;
+    if (!std::isfinite(transformed) || transformed <= 0.0)
+        return 1;
+    const auto maximum = static_cast<qreal>(std::numeric_limits<int>::max());
+    return std::max(1, static_cast<int>(std::llround(std::min(transformed, maximum))));
+}
+
 QRectF textLogicalRect(const TextAnnotation& text) {
     const QFontMetricsF metrics(resolvedAnnotationFont(qMax(1, qRound(text.style.physicalSize))));
     const QStringList lines = text.text.split(QLatin1Char('\n'), Qt::KeepEmptyParts);

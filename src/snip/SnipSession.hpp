@@ -5,6 +5,7 @@
 #include "annotation/AnnotationTypes.hpp"
 #include "snip/SelectionModel.hpp"
 #include "snip/SnapshotBatch.hpp"
+#include "pin/PinTypes.hpp"
 #include <QPointer>
 #include <QThreadPool>
 #include <atomic>
@@ -21,6 +22,8 @@ enum class SnipSessionState {
     Selecting,
     PreparingAnnotation,
     Annotating,
+    PreparingPinFromSelection,
+    CreatingPin,
     ChoosingSavePath,
     ExportingFromSelection,
     ExportingAnnotated,
@@ -32,11 +35,14 @@ class SnipSession final : public QObject {
     explicit SnipSession(SnapshotBatch&, QObject* parent = nullptr);
     SnipSession(SnapshotBatch&, PrepareAnnotation, QObject* parent = nullptr);
     SnipSession(SnapshotBatch&, PrepareAnnotation, ChooseSavePath, QObject* parent = nullptr);
+    SnipSession(SnapshotBatch&, PrepareAnnotation, ChooseSavePath, pin::CreatePin,
+                QObject* parent = nullptr);
     ~SnipSession() override;
     void begin(std::vector<platform::windows::MonitorDescriptor>);
     void cancel();
     void copy();
     void save();
+    void pin();
     void beginAnnotation(annotation::AnnotationTool);
     bool active() const {
         return active_;
@@ -66,6 +72,11 @@ class SnipSession final : public QObject {
     void open(std::vector<FrozenMonitor>);
     void annotationPrepared(std::uint64_t sessionRequestId, std::uint64_t preparationRequestId,
                             QImage image);
+    void preparePinFromSelection();
+    void createPin(std::unique_ptr<annotation::AnnotationDocument>, SnipSessionState sourceState,
+                   annotation::AnnotationTool tool = annotation::AnnotationTool::Select,
+                   annotation::AnnotationStyle style = {}, int mosaicBlockSize = 12);
+    void completePinSuccess();
     void invalidateAnnotationPreparation(bool clearSelection = true) noexcept;
     void chooseSavePath();
     void savePathChosen(QString path);
@@ -82,6 +93,7 @@ class SnipSession final : public QObject {
     QThreadPool workers_;
     PrepareAnnotation preparation_;
     ChooseSavePath savePathChooser_;
+    pin::CreatePin createPin_;
     std::shared_ptr<std::atomic_bool> cancellation_;
     std::shared_ptr<std::mutex> exportFinalizationMutex_;
     std::unique_ptr<annotation::AnnotationDocument> document_;

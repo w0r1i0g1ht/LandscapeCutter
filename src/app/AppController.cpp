@@ -52,14 +52,20 @@ QString formatCaptureNotice(const CaptureNotice& notice) {
 }
 
 AppController::AppController(QApplication& application)
-    : application_(application), captureAction_(tr("截图"), this), quitAction_(tr("退出")) {
+    : application_(application), captureAction_(tr("截图"), this),
+      closeAllPinsAction_(tr("关闭全部贴图"), this), quitAction_(tr("退出")) {
     captureAction_.setObjectName(QStringLiteral("captureCurrentMonitorAction"));
+    closeAllPinsAction_.setObjectName(QStringLiteral("closeAllPinsAction"));
+    closeAllPinsAction_.setEnabled(false);
+    trayMenu_.addAction(&captureAction_);
+    trayMenu_.addAction(&closeAllPinsAction_);
     trayMenu_.addAction(&quitAction_);
-    trayMenu_.insertAction(&quitAction_, &captureAction_);
     trayIcon_.setContextMenu(&trayMenu_);
 
     connect(&quitAction_, &QAction::triggered, &application_, &QCoreApplication::quit);
     connect(&captureAction_, &QAction::triggered, this, &AppController::captureRequested);
+    connect(&closeAllPinsAction_, &QAction::triggered, this,
+            &AppController::closeAllPinsRequested);
 }
 
 bool AppController::start() {
@@ -80,6 +86,10 @@ bool AppController::start() {
 
 void AppController::setCaptureEnabled(const bool enabled) {
     captureAction_.setEnabled(enabled);
+}
+
+void AppController::setPinCount(const std::size_t count) {
+    closeAllPinsAction_.setEnabled(count != 0);
 }
 
 void AppController::showCaptureNotice(const CaptureNotice& notice) {

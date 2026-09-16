@@ -12,6 +12,7 @@
 #include <QPlainTextEdit>
 #include <QRegion>
 #include <QSpinBox>
+#include <QTextDocument>
 #include <QTextCursor>
 #include <QToolButton>
 
@@ -592,6 +593,54 @@ TEST_CASE("annotation text editor exists only on the active toolbar host and com
     CHECK(document.objects().empty());
 }
 
+TEST_CASE("annotation text editor commits when the selected image is clicked elsewhere") {
+    ApplicationFixture fixture;
+    SelectionModel selection;
+    selection.setBounds({0, 0, 120, 80});
+    auto document = annotationDocument({120, 80});
+    AnnotationInteraction interaction(document);
+    interaction.setTool(AnnotationTool::Text);
+    QImage image({120, 80}, QImage::Format_RGB32);
+    image.fill(Qt::white);
+    SnipOverlay overlay{{{0, 0, 120, 80}, image}, selection};
+    overlay.setToolbarHost(true);
+    overlay.setAnnotationContext(&document, &interaction, {0, 0, 120, 80});
+    overlay.createTextEditor({10, 10});
+    auto* editor = overlay.findChild<QPlainTextEdit*>("annotationTextEditor");
+    REQUIRE(editor != nullptr);
+    editor->setPlainText(QStringLiteral("committed"));
+
+    QMouseEvent press{QEvent::MouseButtonPress, QPointF{100, 65}, QPointF{100, 65},
+                      Qt::LeftButton, Qt::LeftButton, Qt::NoModifier};
+    QApplication::sendEvent(&overlay, &press);
+
+    CHECK(overlay.findChild<QPlainTextEdit*>("annotationTextEditor") == nullptr);
+    REQUIRE(document.objects().size() == 1);
+    const auto& annotation = std::get<TextAnnotation>(document.objects().front().payload);
+    CHECK(annotation.anchor == QPointF(10, 10));
+    CHECK(annotation.text == QStringLiteral("committed"));
+}
+
+TEST_CASE("annotation text editor content origin matches the rendered text anchor") {
+    ApplicationFixture fixture;
+    SelectionModel selection;
+    selection.setBounds({0, 0, 120, 80});
+    auto document = annotationDocument({120, 80});
+    AnnotationInteraction interaction(document);
+    interaction.setTool(AnnotationTool::Text);
+    QImage image({120, 80}, QImage::Format_RGB32);
+    image.fill(Qt::white);
+    SnipOverlay overlay{{{0, 0, 120, 80}, image}, selection};
+    overlay.setToolbarHost(true);
+    overlay.setAnnotationContext(&document, &interaction, {0, 0, 120, 80});
+    overlay.createTextEditor({10, 10});
+    auto* editor = overlay.findChild<QPlainTextEdit*>("annotationTextEditor");
+    REQUIRE(editor != nullptr);
+
+    CHECK(editor->document()->documentMargin() == 0.0);
+    CHECK(editor->viewport()->mapTo(&overlay, QPoint{}) == QPoint(10, 10));
+}
+
 TEST_CASE("copy and save commit pending text before requesting export") {
     ApplicationFixture fixture;
     const auto verify = [](const QString& buttonName, bool copy) {
@@ -863,5 +912,60 @@ TEST_CASE("a real select double-click clears its draft before opening text editi
     QApplication::sendEvent(editor, &commit);
     CHECK_FALSE(interaction.hasDraft());
     CHECK(std::get<TextAnnotation>(document.objects().front().payload).text == QStringLiteral("new"));
+}
+
+TEST_CASE("annotation toolbar pin commits pending text before requesting a pin") {
+    ApplicationFixture fixture;
+    SelectionModel selection;
+    selection.setBounds({0, 0, 80, 40});
+    auto document = annotationDocument({80, 40});
+    AnnotationInteraction interaction(document);
+    interaction.setTool(AnnotationTool::Text);
+    QImage image({80, 40}, QImage::Format_RGB32);
+    image.fill(Qt::white);
+    SnipOverlay overlay{{{0, 0, 80, 40}, image}, selection};
+    overlay.setToolbarHost(true);
+    overlay.setAnnotationContext(&document, &interaction, {0, 0, 80, 40});
+    overlay.createTextEditor({4, 4});
+    auto* editor = overlay.findChild<QPlainTextEdit*>("annotationTextEditor");
+    auto* pin = overlay.findChild<QToolButton*>("pinButton");
+    REQUIRE(editor != nullptr);
+    REQUIRE(pin != nullptr);
+    editor->setPlainText(QStringLiteral("pin text"));
+    int requests{};
+    QObject::connect(&overlay, &SnipOverlay::pinRequested, [&] {
+        ++requests;
+        REQUIRE(document.objects().size() == 1);
+        CHECK(std::get<TextAnnotation>(document.objects().front().payload).text ==
+              QStringLiteral("pin text"));
+    });
+
+    pin->click();
+
+    CHECK(requests == 1);
+    CHECK(overlay.findChild<QPlainTextEdit*>("annotationTextEditor") == nullptr);
+}
+
+TEST_CASE("annotation toolbar pin discards empty pending text and requests once") {
+    ApplicationFixture fixture;
+    SelectionModel selection;
+    selection.setBounds({0, 0, 80, 40});
+    auto document = annotationDocument({80, 40});
+    AnnotationInteraction interaction(document);
+    interaction.setTool(AnnotationTool::Text);
+    QImage image({80, 40}, QImage::Format_RGB32);
+    image.fill(Qt::white);
+    SnipOverlay overlay{{{0, 0, 80, 40}, image}, selection};
+    overlay.setToolbarHost(true);
+    overlay.setAnnotationContext(&document, &interaction, {0, 0, 80, 40});
+    overlay.createTextEditor({4, 4});
+    auto* pin = overlay.findChild<QToolButton*>("pinButton");
+    REQUIRE(pin != nullptr);
+    int requests{};
+    QObject::connect(&overlay, &SnipOverlay::pinRequested, [&] { ++requests; });
+    pin->click();
+    CHECK(requests == 1);
+    CHECK(document.objects().empty());
+    CHECK(overlay.findChild<QPlainTextEdit*>("annotationTextEditor") == nullptr);
 }
 } // namespace
